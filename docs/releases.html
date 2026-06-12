@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>下载中心 - HTML Packager</title>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      📦 应用下载中心
+    </div>
+
+    <div class="nav">
+      <a href="./index.html">上传</a>
+      <a href="./status.html">状态</a>
+      <a href="./releases.html">下载</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <div class="hero">
+      <h1>已构建的应用列表</h1>
+      <p>所有通过 Tauri 2.0 打包的桌面应用</p>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <div class="card">
+
+      <button id="refreshBtn">
+        🔄 刷新列表
+      </button>
+
+      <div id="loading" class="status idle">
+        正在加载 releases...
+      </div>
+
+    </div>
+
+    <!-- 列表 -->
+    <div id="releaseList"></div>
+
+  </div>
+
+  <script src="config.js"></script>
+  <script src="releases.js"></script>
+
+</body>
+
+</html>

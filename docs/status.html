@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>任务状态 - HTML Packager</title>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      📡 构建状态监控
+    </div>
+
+    <div class="nav">
+      <a href="./index.html">上传</a>
+      <a href="./status.html">状态</a>
+      <a href="./releases.html">下载</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <div class="hero">
+      <h1>任务状态查询</h1>
+      <p>输入 Job ID 查看 Tauri 构建进度</p>
+    </div>
+
+    <!-- 查询区 -->
+    <div class="card">
+
+      <label>Job ID</label>
+      <input id="jobIdInput" placeholder="job-xxxxxxx" />
+
+      <button id="queryBtn">
+        🔍 查询状态
+      </button>
+
+      <div id="statusBox" class="status idle">
+        等待输入 Job ID
+      </div>
+
+    </div>
+
+    <!-- 结果区 -->
+    <div class="card" id="resultCard" style="display:none;">
+
+      <h2>构建信息</h2>
+
+      <div id="jobInfo"></div>
+
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <div id="platformResult"></div>
+
+      <div id="releaseLinks"></div>
+
+    </div>
+
+  </div>
+
+  <script src="config.js"></script>
+  <script src="status.js"></script>
+
+</body>
+
+</html>
