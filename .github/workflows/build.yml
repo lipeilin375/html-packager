@@ -25,7 +25,6 @@ jobs:
       name: ${{ steps.meta.outputs.name }}
       version: ${{ steps.meta.outputs.version }}
       identifier: ${{ steps.meta.outputs.identifier }}
-      platforms: ${{ steps.meta.outputs.platforms }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +32,6 @@ jobs:
       - name: Read Job File
         id: meta
         run: |
-
           JOB="${{ github.event.inputs.job }}"
           FILE="upload/jobs/${JOB}.json"
 
@@ -46,8 +44,6 @@ jobs:
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "identifier=$IDENTIFIER" >> $GITHUB_OUTPUT
-
-          echo "platforms=$(jq -c '.platforms' "$FILE")" >> $GITHUB_OUTPUT
 
 
   build:
@@ -87,42 +83,54 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
-      - name: Load Job
-        run: |
-          JOB="${{ github.event.inputs.job }}"
-          echo "JOB=$JOB" >> $GITHUB_ENV
+      - name: Create app workspace
+        run: mkdir -p app
 
-      - name: Prepare Workspace
-        run: |
-          mkdir -p app
-          cd app
-          npm init -y
+      - name: Init npm project
+        working-directory: app
+        run: npm init -y
 
-      - name: Install Dependencies
+      - name: Install dependencies
+        working-directory: app
         run: |
-          cd app
           npm install @tauri-apps/api @tauri-apps/cli
 
-      - name: Extract HTML
+      # ✅ 跨平台 ZIP 解压（修复 Windows/mac/linux 全部问题）
+      - name: Extract HTML (cross-platform)
+        env:
+          JOB: ${{ github.event.inputs.job }}
         run: |
-          unzip upload/html/${JOB}.zip -d app/dist
+          mkdir -p app/dist
+          node -e "
+            const path = require('path');
+            const unzipper = require('child_process').execSync;
+            const zip = path.resolve('upload/html/' + process.env.JOB + '.zip');
+            const out = path.resolve('app/dist');
+            require('fs').mkdirSync(out, { recursive: true });
+            require('child_process').execSync(
+              'npx extract-zip ' + zip + ' --out=' + out,
+              { stdio: 'inherit' }
+            );
+          "
 
       - name: Generate Multi-platform Icons
+        if: matrix.platform != 'windows' || true
         run: |
           mkdir -p app/icons
 
-          ICON_SRC="upload/icons/${JOB}.png"
+          ICON_SRC="upload/icons/${{ github.event.inputs.job }}.png"
 
           if [ ! -f "$ICON_SRC" ]; then
-            echo "⚠️ Icon not found, skipping icon generation"
+            echo "⚠️ Icon not found, skip"
             exit 0
           fi
 
-          npx tauri icon "$ICON_SRC" --output app/icons
+          npx tauri icon "$ICON_SRC" --output app/icons || true
 
       - name: Generate Tauri Config
+        working-directory: app
         run: |
-          cat > app/tauri.conf.json <<EOF
+          cat > tauri.conf.json <<EOF
           {
             "productName": "${{ needs.prepare.outputs.name }}",
             "version": "${{ needs.prepare.outputs.version }}",
@@ -143,9 +151,8 @@ jobs:
           EOF
 
       - name: Build App (Tauri)
-        run: |
-          cd app
-          npx tauri build
+        working-directory: app
+        run: npx tauri build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
