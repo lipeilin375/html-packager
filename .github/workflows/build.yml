@@ -84,7 +84,8 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             patchelf
 
-      - name: Prepare build directory (Linux/macOS)
+      # ---------- 解压文件（跨平台安全） ----------
+      - name: Prepare build directory (non-Windows)
         if: runner.os != 'Windows'
         run: |
           mkdir -p build/dist
@@ -98,12 +99,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path build/dist
-          Expand-Archive -Path "${{ inputs.zip_file }}" -DestinationPath build/dist -Force
-          Copy-Item -Path "${{ inputs.icon_file }}" -Destination build/icon.png
-          if (-not (Test-Path build/dist/index.html)) {
+          New-Item -ItemType Directory -Force -Path build\dist
+          # 使用 .NET 类解压，比 Expand-Archive 更稳定
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory("${{ inputs.zip_file }}", "build\dist")
+          Copy-Item -Path "${{ inputs.icon_file }}" -Destination build\icon.png
+          if (-not (Test-Path build\dist\index.html)) {
             Write-Host "::warning::No index.html found in zip root"
           }
+      # --------------------------------------------
 
       - name: Initialize Tauri v2 project
         working-directory: build
@@ -121,7 +125,7 @@ jobs:
         working-directory: build
         run: npx tauri icon icon.png
 
-      - name: Update Tauri config
+      - name: Update Tauri config (signing fix)
         working-directory: build
         run: |
           node -e "
@@ -132,9 +136,12 @@ jobs:
             config.bundle.targets = '${{ matrix.bundles }}'.split(',');
             config.identifier = '${{ inputs.package_name }}';
             config.productName = '${{ inputs.app_name }}';
-            // 允许未签名打包
-            config.bundle.macOS = { signingIdentity: null };
-            config.bundle.windows = { signingIdentity: null };
+            // 仅对 macOS 设置空签名身份（需存在该节点）
+            if (config.bundle.macOS) {
+              config.bundle.macOS.signingIdentity = null;
+            }
+            // 移除 Windows 签名设置，避免额外属性错误
+            delete config.bundle.windows?.signingIdentity;
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
           "
 
@@ -146,11 +153,11 @@ jobs:
         working-directory: build
         run: npx tauri build --bundles ${{ matrix.bundles }}
 
-      - name: Collect artifacts
+      - name: Collect artifacts (case-insensitive)
         run: |
           mkdir -p artifacts
           find build/src-tauri/target/release/bundle -type f \
-            \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \) \
+            \( -iname "*.msi" -o -iname "*.exe" -o -iname "*.dmg" -o -iname "*.deb" -o -iname "*.AppImage" \) \
             -exec cp {} artifacts/ \;
 
       - name: Upload artifacts
