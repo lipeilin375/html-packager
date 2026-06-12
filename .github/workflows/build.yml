@@ -137,8 +137,10 @@ jobs:
           cd tmpapp
           npm install
           
-          # 更新所有 Rust 依赖到兼容版本
+          # 强制更新 Tauri 到修复兼容问题的版本
           cd src-tauri
+          sed -i 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
+          sed -i 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
           cargo update
           cd ..
           
@@ -208,6 +210,8 @@ jobs:
           npm install
           
           cd src-tauri
+          sed -i 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
+          sed -i 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
           cargo update
           cd ..
           
@@ -273,6 +277,8 @@ jobs:
           npm install
           
           cd src-tauri
+          sed -i '' 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
+          sed -i '' 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
           cargo update
           cd ..
           
