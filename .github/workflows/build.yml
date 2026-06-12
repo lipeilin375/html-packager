@@ -127,35 +127,121 @@ jobs:
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           
-          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          # 手动创建 Tauri 项目，避免 create-tauri-app 的版本锁定
+          mkdir -p tmpapp/src-tauri/icons
+          mkdir -p tmpapp/src
           
-          rm -rf tmpapp/src/*
+          # 复制静态文件和图标
           cp -r src/* tmpapp/src/
-          rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
+          
+          # 创建 package.json
+          cat > tmpapp/package.json << EOF
+          {
+            "name": "$APP_NAME",
+            "version": "$VERSION",
+            "private": true,
+            "scripts": {
+              "tauri": "tauri"
+            },
+            "devDependencies": {
+              "@tauri-apps/cli": "^2.0.0"
+            }
+          }
+          EOF
+          
+          # 创建 src-tauri/Cargo.toml (固定 tauri 2.11.2)
+          cat > tmpapp/src-tauri/Cargo.toml << EOF
+          [package]
+          name = "$APP_NAME"
+          version = "$VERSION"
+          description = "A Tauri App"
+          authors = ["you"]
+          edition = "2021"
+          
+          [lib]
+          name = "$APP_NAME"
+          crate-type = ["cdylib", "staticlib"]
+          
+          [build-dependencies]
+          tauri-build = "2.1.1"
+          
+          [dependencies]
+          tauri = { version = "2.11.2", features = ["shell-open"] }
+          serde = { version = "1", features = ["derive"] }
+          serde_json = "1"
+          
+          [features]
+          default = ["custom-protocol"]
+          custom-protocol = ["tauri/custom-protocol"]
+          EOF
+          
+          # 创建 src-tauri/build.rs
+          cat > tmpapp/src-tauri/build.rs << EOF
+          fn main() {
+              tauri_build::build()
+          }
+          EOF
+          
+          # 创建 src-tauri/src/lib.rs
+          cat > tmpapp/src-tauri/src/lib.rs << EOF
+          #[cfg_attr(mobile, tauri::mobile_entry_point)]
+          pub fn run() {
+              tauri::Builder::default()
+                  .run(tauri::generate_context!())
+                  .expect("error while running tauri application");
+          }
+          EOF
+          
+          # 创建 src-tauri/src/main.rs
+          cat > tmpapp/src-tauri/src/main.rs << EOF
+          #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+          fn main() {
+              app_lib::run();
+          }
+          EOF
+          
+          # 创建 tauri.conf.json
+          cat > tmpapp/src-tauri/tauri.conf.json << EOF
+          {
+            "productName": "$APP_NAME",
+            "version": "$VERSION",
+            "identifier": "$BUNDLE_ID",
+            "build": {
+              "frontendDist": "../src",
+              "beforeDevCommand": null,
+              "beforeBuildCommand": null
+            },
+            "app": {
+              "windows": [
+                {
+                  "title": "$APP_NAME",
+                  "width": 1200,
+                  "height": 800,
+                  "resizable": true,
+                  "fullscreen": false
+                }
+              ],
+              "security": {
+                "csp": null
+              }
+            },
+            "bundle": {
+              "active": true,
+              "targets": ["nsis", "msi"],
+              "icon": [
+                "icons/32x32.png",
+                "icons/128x128.png",
+                "icons/128x128@2x.png",
+                "icons/icon.icns",
+                "icons/icon.ico"
+              ]
+            }
+          }
+          EOF
           
           cd tmpapp
           npm install
-          
-          # 强制更新 Tauri 到修复兼容问题的版本
-          cd src-tauri
-          sed -i 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
-          sed -i 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
-          cargo update
-          cd ..
-          
-          npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
-          
-          TARGETS='["nsis","msi"]'
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
-          
           npm run tauri build
           
           mkdir artifacts
@@ -199,34 +285,113 @@ jobs:
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           
-          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          mkdir -p tmpapp/src-tauri/icons
+          mkdir -p tmpapp/src
           
-          rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
-          rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
+          
+          cat > tmpapp/package.json << EOF
+          {
+            "name": "$APP_NAME",
+            "version": "$VERSION",
+            "private": true,
+            "scripts": {
+              "tauri": "tauri"
+            },
+            "devDependencies": {
+              "@tauri-apps/cli": "^2.0.0"
+            }
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/Cargo.toml << EOF
+          [package]
+          name = "$APP_NAME"
+          version = "$VERSION"
+          description = "A Tauri App"
+          authors = ["you"]
+          edition = "2021"
+          
+          [lib]
+          name = "$APP_NAME"
+          crate-type = ["cdylib", "staticlib"]
+          
+          [build-dependencies]
+          tauri-build = "2.1.1"
+          
+          [dependencies]
+          tauri = { version = "2.11.2", features = ["shell-open"] }
+          serde = { version = "1", features = ["derive"] }
+          serde_json = "1"
+          
+          [features]
+          default = ["custom-protocol"]
+          custom-protocol = ["tauri/custom-protocol"]
+          EOF
+          
+          cat > tmpapp/src-tauri/build.rs << EOF
+          fn main() {
+              tauri_build::build()
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/src/lib.rs << EOF
+          #[cfg_attr(mobile, tauri::mobile_entry_point)]
+          pub fn run() {
+              tauri::Builder::default()
+                  .run(tauri::generate_context!())
+                  .expect("error while running tauri application");
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/src/main.rs << EOF
+          #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+          fn main() {
+              app_lib::run();
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/tauri.conf.json << EOF
+          {
+            "productName": "$APP_NAME",
+            "version": "$VERSION",
+            "identifier": "$BUNDLE_ID",
+            "build": {
+              "frontendDist": "../src",
+              "beforeDevCommand": null,
+              "beforeBuildCommand": null
+            },
+            "app": {
+              "windows": [
+                {
+                  "title": "$APP_NAME",
+                  "width": 1200,
+                  "height": 800,
+                  "resizable": true,
+                  "fullscreen": false
+                }
+              ],
+              "security": {
+                "csp": null
+              }
+            },
+            "bundle": {
+              "active": true,
+              "targets": ["deb", "appimage"],
+              "icon": [
+                "icons/32x32.png",
+                "icons/128x128.png",
+                "icons/128x128@2x.png",
+                "icons/icon.icns",
+                "icons/icon.ico"
+              ]
+            }
+          }
+          EOF
           
           cd tmpapp
           npm install
-          
-          cd src-tauri
-          sed -i 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
-          sed -i 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
-          cargo update
-          cd ..
-          
-          npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
-          
-          TARGETS='["deb","appimage"]'
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
-          
           npm run tauri build
           
           mkdir artifacts
@@ -266,34 +431,113 @@ jobs:
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           
-          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          mkdir -p tmpapp/src-tauri/icons
+          mkdir -p tmpapp/src
           
-          rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
-          rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
+          
+          cat > tmpapp/package.json << EOF
+          {
+            "name": "$APP_NAME",
+            "version": "$VERSION",
+            "private": true,
+            "scripts": {
+              "tauri": "tauri"
+            },
+            "devDependencies": {
+              "@tauri-apps/cli": "^2.0.0"
+            }
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/Cargo.toml << EOF
+          [package]
+          name = "$APP_NAME"
+          version = "$VERSION"
+          description = "A Tauri App"
+          authors = ["you"]
+          edition = "2021"
+          
+          [lib]
+          name = "$APP_NAME"
+          crate-type = ["cdylib", "staticlib"]
+          
+          [build-dependencies]
+          tauri-build = "2.1.1"
+          
+          [dependencies]
+          tauri = { version = "2.11.2", features = ["shell-open"] }
+          serde = { version = "1", features = ["derive"] }
+          serde_json = "1"
+          
+          [features]
+          default = ["custom-protocol"]
+          custom-protocol = ["tauri/custom-protocol"]
+          EOF
+          
+          cat > tmpapp/src-tauri/build.rs << EOF
+          fn main() {
+              tauri_build::build()
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/src/lib.rs << EOF
+          #[cfg_attr(mobile, tauri::mobile_entry_point)]
+          pub fn run() {
+              tauri::Builder::default()
+                  .run(tauri::generate_context!())
+                  .expect("error while running tauri application");
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/src/main.rs << EOF
+          #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+          fn main() {
+              app_lib::run();
+          }
+          EOF
+          
+          cat > tmpapp/src-tauri/tauri.conf.json << EOF
+          {
+            "productName": "$APP_NAME",
+            "version": "$VERSION",
+            "identifier": "$BUNDLE_ID",
+            "build": {
+              "frontendDist": "../src",
+              "beforeDevCommand": null,
+              "beforeBuildCommand": null
+            },
+            "app": {
+              "windows": [
+                {
+                  "title": "$APP_NAME",
+                  "width": 1200,
+                  "height": 800,
+                  "resizable": true,
+                  "fullscreen": false
+                }
+              ],
+              "security": {
+                "csp": null
+              }
+            },
+            "bundle": {
+              "active": true,
+              "targets": ["dmg"],
+              "icon": [
+                "icons/32x32.png",
+                "icons/128x128.png",
+                "icons/128x128@2x.png",
+                "icons/icon.icns",
+                "icons/icon.ico"
+              ]
+            }
+          }
+          EOF
           
           cd tmpapp
           npm install
-          
-          cd src-tauri
-          sed -i '' 's/^tauri = .*/tauri = "2.11.2"/' Cargo.toml
-          sed -i '' 's/^tauri-build = .*/tauri-build = "2.1.1"/' Cargo.toml
-          cargo update
-          cd ..
-          
-          npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
-          
-          TARGETS='["dmg"]'
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
-          
           npm run tauri build
           
           mkdir artifacts
