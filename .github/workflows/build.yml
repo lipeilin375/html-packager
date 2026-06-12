@@ -1,0 +1,114 @@
+name: Package HTML App
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive_name:
+        description: '上传的HTML压缩包文件名（含后缀）'
+        required: true
+      icon_name:
+        description: '图标文件名（含后缀）'
+        required: true
+      platforms:
+        description: '目标平台，逗号分隔 (mac,linux,windows)'
+        required: true
+        default: 'mac,linux,windows'
+
+jobs:
+  # 将 platforms 输入转换为矩阵所需的 JSON 数组
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.parse.outputs.list }}
+    steps:
+      - id: parse
+        run: |
+          INPUT="${{ github.event.inputs.platforms }}"
+          # 将 "mac,windows" 转为 '["mac","windows"]'
+          JSON_LIST="[\"${INPUT//,/\",\"}\"]"
+          echo "list=$JSON_LIST" >> $GITHUB_OUTPUT
+
+  package:
+    needs: setup-matrix
+    strategy:
+      matrix:
+        platform: ${{ fromJSON(needs.setup-matrix.outputs.platforms) }}
+        include:
+          - platform: mac
+            os: macos-latest
+          - platform: linux
+            os: ubuntu-latest
+          - platform: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 跨平台解压 HTML 压缩包
+      - name: Extract HTML archive
+        uses: DuckSoft/extract-archive-action@v1
+        with:
+          file: uploads/${{ github.event.inputs.archive_name }}
+          target: app/
+
+      - name: Copy icon
+        shell: bash
+        run: cp uploads/${{ github.event.inputs.icon_name }} icon.png
+
+      - name: Install nativefier
+        run: npm install -g nativefier
+
+      - name: Package for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          mkdir -p output
+          npx nativefier --name "MyApp" \
+            --icon icon.png \
+            --platform ${{ matrix.platform }} \
+            --arch x64 \
+            ./app \
+            ./output
+
+      # 压缩产物，各系统使用原生命令
+      - name: Zip macOS/Linux
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cd output
+          dir_name=$(ls -d */ | head -1)
+          zip -r "../${{ matrix.platform }}.zip" "$dir_name"
+
+      - name: Zip Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd output
+          $dir = Get-ChildItem -Directory | Select-Object -First 1
+          Compress-Archive -Path $dir.FullName -DestinationPath "../${{ matrix.platform }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-package
+          path: ${{ matrix.platform }}.zip
+
+  # 将所有平台产物合并发布到 Release
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-${{ github.run_id }}
+          name: Build ${{ github.run_number }}
+          files: release-assets/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

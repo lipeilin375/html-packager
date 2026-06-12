@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>HTML 打包工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <h1>静态HTML → 桌面应用</h1>
+  <div class="step">
+    <label>GitHub Personal Access Token（需要 repo 和 workflow 权限）</label>
+    <input type="password" id="token" placeholder="ghp_xxxx">
+  </div>
+  <div class="step">
+    <label>上传HTML文件（ZIP压缩，≤20MB）</label>
+    <input type="file" id="htmlZip" accept=".zip">
+  </div>
+  <div class="step">
+    <label>上传应用图标（PNG / ICNS / ICO）</label>
+    <input type="file" id="iconFile" accept=".png,.icns,.ico">
+  </div>
+  <div class="step">
+    <label>选择目标平台</label>
+    <select id="platforms" multiple>
+      <option value="mac">macOS</option>
+      <option value="linux">Linux</option>
+      <option value="windows">Windows</option>
+    </select>
+  </div>
+  <button id="buildBtn">开始打包</button>
+  <div id="status"></div>
+  <div id="downloadLinks"></div>
+
+  <script src="app.js" type="module"></script>
+</body>
+
+</html>
