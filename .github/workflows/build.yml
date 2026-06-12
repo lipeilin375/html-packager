@@ -33,13 +33,20 @@ jobs:
         id: set-matrix
         run: |
           PLATFORMS="${{ inputs.platforms }}"
+          # 初始化空矩阵
           MATRIX='{"include":[]}'
           IFS=',' read -ra PLAT <<< "$PLATFORMS"
           for p in "${PLAT[@]}"; do
             case $p in
-              windows) MATRIX=$(echo $MATRIX | jq '.include += [{"os":"windows-latest","platform":"windows","bundles":"msi,nsis"}]') ;;
-              macos)   MATRIX=$(echo $MATRIX | jq '.include += [{"os":"macos-latest","platform":"macos","bundles":"dmg"}]') ;;
-              linux)   MATRIX=$(echo $MATRIX | jq '.include += [{"os":"ubuntu-latest","platform":"linux","bundles":"deb,appimage"}]') ;;
+              windows)
+                MATRIX=$(jq -c '.include += [{"os":"windows-latest","platform":"windows","bundles":"msi,nsis"}]' <<< "$MATRIX")
+                ;;
+              macos)
+                MATRIX=$(jq -c '.include += [{"os":"macos-latest","platform":"macos","bundles":"dmg"}]' <<< "$MATRIX")
+                ;;
+              linux)
+                MATRIX=$(jq -c '.include += [{"os":"ubuntu-latest","platform":"linux","bundles":"deb,appimage"}]' <<< "$MATRIX")
+                ;;
             esac
           done
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
@@ -83,20 +90,19 @@ jobs:
             echo "::warning::No index.html found in zip root"
           fi
 
-      - name: Initialize Tauri project
+      - name: Initialize Tauri v2 project
         working-directory: build
         run: |
           npm init -y
           npm install --save-dev @tauri-apps/cli
+          # 使用 --ci 跳过所有交互询问
           npx tauri init \
+            --ci \
             --app-name "${{ inputs.app_name }}" \
             --window-title "${{ inputs.app_name }}" \
             --frontend-dist ../dist \
             --dev-url "" \
-            --before-dev-command "" \
-            --before-build-command "" \
-            --identifier "${{ inputs.package_name }}" \
-            --ci
+            --identifier "${{ inputs.package_name }}"
 
       - name: Generate icons
         working-directory: build
@@ -113,7 +119,7 @@ jobs:
             config.bundle.targets = '${{ matrix.bundles }}'.split(',');
             config.identifier = '${{ inputs.package_name }}';
             config.productName = '${{ inputs.app_name }}';
-            // 允许未签名打包（可根据需要添加签名配置）
+            // 允许未签名打包
             config.bundle.macOS = { signingIdentity: null };
             config.bundle.windows = { signingIdentity: null };
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
