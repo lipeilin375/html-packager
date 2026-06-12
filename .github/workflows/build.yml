@@ -137,9 +137,9 @@ jobs:
           cd tmpapp
           npm install
           
-          # 修复 time crate 冲突
+          # 更新所有 Rust 依赖到兼容版本
           cd src-tauri
-          cargo update -p time --precise 0.3.36
+          cargo update
           cd ..
           
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
@@ -208,7 +208,7 @@ jobs:
           npm install
           
           cd src-tauri
-          cargo update -p time --precise 0.3.36
+          cargo update
           cd ..
           
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
@@ -273,7 +273,7 @@ jobs:
           npm install
           
           cd src-tauri
-          cargo update -p time --precise 0.3.36
+          cargo update
           cd ..
           
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
