@@ -1,65 +1,240 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>静态网站打包器 - Tauri 2.0</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tauri App 打包器</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 </head>
-<body>
-    <div class="container">
-        <h1>📦 静态网站 → 桌面应用打包器</h1>
-        <p>上传 HTML 压缩包及图标，选择目标平台，自动生成可执行文件并发布到 Release</p>
+<body class="bg-light">
+  <div class="container py-4" style="max-width: 720px;">
+    <h1 class="mb-4">📦 静态 HTML → Tauri 应用</h1>
 
-        <form id="buildForm">
-            <div class="form-group">
-                <label>应用名称 *</label>
-                <input type="text" id="appName" placeholder="例如：MyApp" required>
-            </div>
-
-            <div class="form-group">
-                <label>版本号 *</label>
-                <input type="text" id="version" placeholder="例如：1.0.0" required>
-            </div>
-
-            <div class="form-group">
-                <label>包名 (Bundle Identifier) *</label>
-                <input type="text" id="bundleId" placeholder="例如：com.example.myapp" required>
-            </div>
-
-            <div class="form-group">
-                <label>目标平台 *</label>
-                <div class="checkbox-group">
-                    <label><input type="checkbox" value="windows" checked> Windows (.exe/.msi)</label>
-                    <label><input type="checkbox" value="linux" checked> Linux (.deb/.appimage)</label>
-                    <label><input type="checkbox" value="macos" checked> macOS (.dmg)</label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>应用图标 (PNG/JPG，建议 ≥1024x1024) *</label>
-                <input type="file" id="icon" accept="image/png,image/jpeg" required>
-            </div>
-
-            <div class="form-group">
-                <label>静态网站压缩包 (ZIP，≤20MB) *</label>
-                <input type="file" id="websiteZip" accept=".zip" required>
-                <small>压缩包内应包含 index.html 及其他资源文件，直接放在根目录或单层文件夹均可</small>
-            </div>
-
-            <div class="form-group">
-                <label>GitHub Personal Access Token *</label>
-                <input type="password" id="githubToken" placeholder="需要 repo 权限" required>
-                <small>令牌需具备 <code>repo</code> 和 <code>workflow</code> 权限</small>
-            </div>
-
-            <button type="submit" id="submitBtn">🚀 提交打包任务</button>
-        </form>
-
-        <div id="message" class="message"></div>
-        <div id="result"></div>
+    <!-- Token 设置 -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <label class="form-label">GitHub Token <span class="text-danger">*</span></label>
+        <input type="password" id="token" class="form-control" placeholder="ghp_..." />
+        <div class="form-text">
+          需要 <code>repo</code> 权限。未保存则自动使用上次输入。
+        </div>
+      </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- 应用信息 -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">仓库全名</label>
+          <input type="text" id="repoFullName" class="form-control" placeholder="例如 yourname/your-repo" />
+          <div class="form-text">自动从当前页面 URL 检测，如不正确请手动修改。</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">应用名称 <span class="text-danger">*</span></label>
+            <input type="text" id="appName" class="form-control" placeholder="我的应用" required />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">版本号 <span class="text-danger">*</span></label>
+            <input type="text" id="version" class="form-control" value="1.0.0" required />
+          </div>
+          <div class="col-12">
+            <label class="form-label">包名 <span class="text-danger">*</span></label>
+            <input type="text" id="packageName" class="form-control" placeholder="com.example.app" required />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 平台选择 -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <label class="form-label">目标平台</label>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="windows" id="chkWindows" checked />
+          <label class="form-check-label" for="chkWindows">Windows (.exe, .msi)</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="macos" id="chkMacos" checked />
+          <label class="form-check-label" for="chkMacos">macOS (.dmg)</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="linux" id="chkLinux" checked />
+          <label class="form-check-label" for="chkLinux">Linux (.deb, .AppImage)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文件上传 -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">静态 HTML 压缩包 (.zip) <span class="text-danger">*</span></label>
+          <input type="file" id="zipFile" class="form-control" accept=".zip" />
+          <div class="form-text">最大 20 MB，根目录需包含 <code>index.html</code></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">应用图标 (.png) <span class="text-danger">*</span></label>
+          <input type="file" id="iconFile" class="form-control" accept="image/png" />
+          <div class="form-text">建议 512x512 像素</div>
+        </div>
+      </div>
+    </div>
+
+    <button id="submitBtn" class="btn btn-primary w-100 mb-3" disabled>开始打包</button>
+
+    <!-- 状态/进度 -->
+    <div id="status" class="alert alert-info d-none" role="alert"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    (() => {
+      const tokenInput = document.getElementById('token');
+      const repoInput = document.getElementById('repoFullName');
+      const submitBtn = document.getElementById('submitBtn');
+      const statusDiv = document.getElementById('status');
+
+      // 从 URL 自动解析仓库
+      function detectRepo() {
+        const { hostname, pathname } = window.location;
+        const parts = pathname.split('/').filter(Boolean);
+        if (hostname.endsWith('github.io')) {
+          const owner = hostname.replace('.github.io', '');
+          const repo = parts[0] || '';
+          if (owner && repo) return `${owner}/${repo}`;
+        }
+        return '';
+      }
+
+      // 加载本地存储
+      function loadStorage() {
+        const savedToken = localStorage.getItem('gh_token');
+        if (savedToken) tokenInput.value = savedToken;
+        repoInput.value = detectRepo();
+        checkReady();
+      }
+
+      function checkReady() {
+        const tokenOk = tokenInput.value.trim().length > 0;
+        const repoOk = repoInput.value.trim().length > 0;
+        submitBtn.disabled = !(tokenOk && repoOk);
+      }
+
+      // 保存 token
+      tokenInput.addEventListener('input', () => {
+        localStorage.setItem('gh_token', tokenInput.value.trim());
+        checkReady();
+      });
+      repoInput.addEventListener('input', checkReady);
+
+      function setStatus(msg, type = 'info') {
+        statusDiv.textContent = msg;
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.classList.remove('d-none');
+      }
+
+      async function uploadAndTrigger() {
+        const token = tokenInput.value.trim();
+        const [owner, repo] = repoInput.value.trim().split('/');
+        const appName = document.getElementById('appName').value.trim();
+        const version = document.getElementById('version').value.trim();
+        const packageName = document.getElementById('packageName').value.trim();
+        const zipFile = document.getElementById('zipFile').files[0];
+        const iconFile = document.getElementById('iconFile').files[0];
+        const platforms = [
+          document.getElementById('chkWindows').checked ? 'windows' : '',
+          document.getElementById('chkMacos').checked ? 'macos' : '',
+          document.getElementById('chkLinux').checked ? 'linux' : ''
+        ].filter(Boolean).join(',');
+
+        if (!appName || !version || !packageName) return alert('请填写完整信息');
+        if (!zipFile) return alert('请上传 HTML 压缩包');
+        if (!iconFile) return alert('请上传图标');
+        if (zipFile.size > 20 * 1024 * 1024) return alert('压缩包不能超过 20 MB');
+
+        setStatus('正在上传文件…', 'info');
+        submitBtn.disabled = true;
+
+        const runId = Date.now().toString();
+        const headers = {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github+json'
+        };
+
+        try {
+          // 获取默认分支
+          const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+          if (!repoInfoRes.ok) throw new Error('仓库访问失败，检查 Token 和仓库名');
+          const repoInfo = await repoInfoRes.json();
+          const branch = repoInfo.default_branch || 'main';
+
+          // 辅助函数：上传文件
+          async function uploadFile(file, path) {
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+            const body = {
+              message: `Upload ${file.name}`,
+              content: base64,
+              branch: branch
+            };
+            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+              method: 'PUT',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(`上传失败: ${err.message}`);
+            }
+          }
+
+          await uploadFile(zipFile, `upload/${runId}/archive.zip`);
+          await uploadFile(iconFile, `upload/${runId}/icon.png`);
+
+          setStatus('文件上传完成，正在触发打包…', 'info');
+
+          // 触发 workflow
+          const workflowId = 'build.yml'; // 文件名
+          const dispatchBody = {
+            ref: branch,
+            inputs: {
+              zip_file: `upload/${runId}/archive.zip`,
+              icon_file: `upload/${runId}/icon.png`,
+              app_name: appName,
+              version: version,
+              package_name: packageName,
+              platforms: platforms
+            }
+          };
+          const dispatchRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
+            {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(dispatchBody)
+            }
+          );
+          if (!dispatchRes.ok) throw new Error('触发工作流失败');
+
+          setStatus(
+            `✅ 打包已开始！请前往 <a href="https://github.com/${owner}/${repo}/actions" target="_blank">Actions</a> 查看进度，完成后可在 <a href="https://github.com/${owner}/${repo}/releases" target="_blank">Releases</a> 下载。`,
+            'success'
+          );
+        } catch (err) {
+          setStatus(`❌ ${err.message}`, 'danger');
+        } finally {
+          submitBtn.disabled = false;
+        }
+      }
+
+      submitBtn.addEventListener('click', uploadAndTrigger);
+      loadStorage();
+    })();
+  </script>
 </body>
 </html>
