@@ -47,7 +47,6 @@ jobs:
         run: |
           ZIP_PATH=$(jq -r '.zip_file' ${{ github.event.inputs.metadata_file }})
           mkdir -p website_src
-          echo "Downloading $ZIP_PATH"
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L "https://api.github.com/repos/${{ github.repository }}/contents/${ZIP_PATH}" -o upload.zip
@@ -56,21 +55,20 @@ jobs:
             exit 1
           fi
           unzip -q upload.zip -d website_src
-          # 处理单层文件夹情况
+          # 处理单层文件夹
           if [ $(ls -1 website_src | wc -l) -eq 1 ] && [ -d "website_src/$(ls website_src)" ]; then
             mv website_src/*/* website_src/
           fi
           if [ ! -f website_src/index.html ]; then
-            echo "ERROR: No index.html found in extracted files"
+            echo "ERROR: No index.html found"
             exit 1
           fi
-          echo "✅ Website files extracted"
+          echo "✅ Website extracted"
 
       - name: Generate Tauri icons
         run: |
           npm install -g @tauri-apps/cli@latest
           ICON_PATH=$(jq -r '.icon_file' ${{ github.event.inputs.metadata_file }})
-          echo "Downloading icon from $ICON_PATH"
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L "https://api.github.com/repos/${{ github.repository }}/contents/${ICON_PATH}" -o input_icon.png
@@ -88,21 +86,12 @@ jobs:
 
       - name: Prepare Tauri resources artifact
         run: |
-          # 确保所有必需目录存在
           mkdir -p tauri_resources/src
           mkdir -p tauri_resources/icons
-          # 复制网站文件
           cp -r website_src/* tauri_resources/src/
-          # 复制图标文件
           cp -r generated_icons/* tauri_resources/icons/
-          # 保存元数据
           cp ${{ github.event.inputs.metadata_file }} tauri_resources/build_metadata.json
-          # 打包为 artifact
           tar -czf resources.tar.gz -C tauri_resources .
-          if [ ! -f resources.tar.gz ]; then
-            echo "ERROR: Failed to create resources.tar.gz"
-            exit 1
-          fi
           echo "✅ Resources prepared"
 
       - name: Upload resources artifact
@@ -111,6 +100,7 @@ jobs:
           name: tauri-resources
           path: resources.tar.gz
 
+  # ===================== Windows =====================
   build-windows:
     needs: setup
     if: contains(fromJson(needs.setup.outputs.platforms), 'windows')
@@ -129,45 +119,47 @@ jobs:
       - name: Build Tauri app (Windows)
         shell: bash
         run: |
-          # 读取元数据
           APP_NAME=$(jq -r '.app_name' build_metadata.json)
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           PLATFORMS=$(jq -r '.platforms' build_metadata.json)
-          # 创建临时 Tauri 项目
+          
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
-          # 覆盖资源
+          
+          # 复制静态文件和图标
           rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
           rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
-          # 修改配置
+          
           cd tmpapp
           npm install
-          # 动态修改 tauri.conf.json
+          
+          # 修改配置 (Tauri 2.0 使用 frontendDist)
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.distDir='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          # 设置 bundle 目标
-          TARGETS="[]"
-          if [[ "$PLATFORMS" == *"windows"* ]]; then TARGETS='["nsis","msi"]'; fi
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          
+          TARGETS='["nsis","msi"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
-          # 打包
+          
           npm run tauri build
-          # 收集产物
           mkdir artifacts
           cp src-tauri/target/release/bundle/nsis/*.exe artifacts/ 2>/dev/null || true
           cp src-tauri/target/release/bundle/msi/*.msi artifacts/ 2>/dev/null || true
-          echo "✅ Build completed"
+          echo "✅ Windows build completed"
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-bundle
           path: tmpapp/artifacts/*
 
+  # ===================== Linux =====================
   build-linux:
     needs: setup
     if: contains(fromJson(needs.setup.outputs.platforms), 'linux')
@@ -193,32 +185,41 @@ jobs:
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           PLATFORMS=$(jq -r '.platforms' build_metadata.json)
+          
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          
           rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
           rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
+          
           cd tmpapp
           npm install
+          
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.distDir='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          TARGETS="[]"
-          if [[ "$PLATFORMS" == *"linux"* ]]; then TARGETS='["deb","appimage"]'; fi
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          
+          TARGETS='["deb","appimage"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
+          
           npm run tauri build
           mkdir artifacts
           cp src-tauri/target/release/bundle/deb/*.deb artifacts/ 2>/dev/null || true
           cp src-tauri/target/release/bundle/appimage/*.AppImage artifacts/ 2>/dev/null || true
+          echo "✅ Linux build completed"
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-bundle
           path: tmpapp/artifacts/*
 
+  # ===================== macOS =====================
   build-macos:
     needs: setup
     if: contains(fromJson(needs.setup.outputs.platforms), 'macos')
@@ -240,31 +241,40 @@ jobs:
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
           PLATFORMS=$(jq -r '.platforms' build_metadata.json)
+          
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          
           rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
           rm -rf tmpapp/src-tauri/icons/*
           cp -r icons/* tmpapp/src-tauri/icons/
+          
           cd tmpapp
           npm install
+          
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.distDir='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          TARGETS="[]"
-          if [[ "$PLATFORMS" == *"macos"* ]]; then TARGETS='["dmg"]'; fi
+          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          
+          TARGETS='["dmg"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.targets=$TARGETS"
+          
           npm run tauri build
           mkdir artifacts
           cp src-tauri/target/release/bundle/dmg/*.dmg artifacts/ 2>/dev/null || true
+          echo "✅ macOS build completed"
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-bundle
           path: tmpapp/artifacts/*
 
+  # ===================== Release =====================
   release:
     needs: [setup, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
