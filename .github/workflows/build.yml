@@ -72,7 +72,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # Linux dependencies
+      # Linux deps
       - name: Install Linux deps
         if: matrix.platform == 'linux'
         run: |
@@ -85,7 +85,7 @@ jobs:
         run: npm install -g @tauri-apps/cli
 
       # =========================
-      # workspace
+      # workspace setup
       # =========================
       - name: Setup workspace
         run: mkdir -p app
@@ -94,16 +94,15 @@ jobs:
         working-directory: app
         run: npm init -y
 
-      # ⚠️ unzipper 必须在 root（关键修复点）
-      - name: Install root dependencies
+      - name: Install dependencies (root + app)
         run: npm install unzipper
 
-      - name: Install app dependencies
+      - name: Install app deps
         working-directory: app
         run: npm install @tauri-apps/api @tauri-apps/cli
 
       # =========================
-      # HTML extract (stable)
+      # HTML extract (Node script)
       # =========================
       - name: Extract HTML
         env:
@@ -111,22 +110,15 @@ jobs:
         run: node scripts/extract.js
 
       # =========================
-      # icons
+      # ICON (Node script - fixed)
       # =========================
       - name: Generate icons
-        run: |
-          mkdir -p app/icons
-
-          ICON="upload/icons/${{ github.event.inputs.job }}.png"
-
-          if [ -f "$ICON" ]; then
-            npx tauri icon "$ICON" --output app/icons || true
-          else
-            echo "skip icon"
-          fi
+        env:
+          JOB: ${{ github.event.inputs.job }}
+        run: node scripts/icon.js
 
       # =========================
-      # tauri config
+      # Tauri config
       # =========================
       - name: Generate tauri config
         working-directory: app
