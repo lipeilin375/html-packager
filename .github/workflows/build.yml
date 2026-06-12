@@ -83,60 +83,64 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
-      - name: Create app workspace
+      - name: Create workspace
         run: mkdir -p app
 
-      - name: Init npm project
+      - name: Init npm
         working-directory: app
         run: npm init -y
 
-      - name: Install dependencies
+      - name: Install deps
         working-directory: app
-        run: |
-          npm install @tauri-apps/api @tauri-apps/cli unzipper
+        run: npm install @tauri-apps/api @tauri-apps/cli unzipper
 
-      # ✅ ⭐ 最稳定跨平台解压方案（已修复核心问题）
-      - name: Extract HTML (cross-platform stable)
+      # ✅ 核心修复：不再 inline node -e
+      - name: Create extract script
+        run: |
+          mkdir -p scripts
+          cat > scripts/extract.js <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const unzipper = require('unzipper');
+
+          const job = process.env.JOB;
+          const zipPath = path.resolve(`upload/html/${job}.zip`);
+          const outDir = path.resolve('app/dist');
+
+          if (!fs.existsSync(zipPath)) {
+            console.error('ZIP not found:', zipPath);
+            process.exit(1);
+          }
+
+          fs.mkdirSync(outDir, { recursive: true });
+
+          fs.createReadStream(zipPath)
+            .pipe(unzipper.Extract({ path: outDir }))
+            .on('close', () => console.log('Extract done'))
+            .on('error', err => {
+              console.error(err);
+              process.exit(1);
+            });
+          EOF
+
+      - name: Extract HTML (stable)
         env:
           JOB: ${{ github.event.inputs.job }}
-        run: |
-          node -e "
-            const fs = require('fs');
-            const path = require('path');
-            const unzipper = require('unzipper');
+        run: node scripts/extract.js
 
-            const zipPath = path.resolve(`upload/html/${process.env.JOB}.zip`);
-            const outDir = path.resolve('app/dist');
-
-            if (!fs.existsSync(zipPath)) {
-              console.error('❌ ZIP not found:', zipPath);
-              process.exit(1);
-            }
-
-            fs.mkdirSync(outDir, { recursive: true });
-
-            fs.createReadStream(zipPath)
-              .pipe(unzipper.Extract({ path: outDir }))
-              .on('close', () => console.log('✅ HTML extracted'))
-              .on('error', err => {
-                console.error('❌ Extract failed:', err);
-                process.exit(1);
-              });
-          "
-
-      - name: Generate Multi-platform Icons
+      - name: Generate icons
         run: |
           mkdir -p app/icons
 
-          ICON_SRC="upload/icons/${{ github.event.inputs.job }}.png"
+          ICON="upload/icons/${{ github.event.inputs.job }}.png"
 
-          if [ -f "$ICON_SRC" ]; then
-            npx tauri icon "$ICON_SRC" --output app/icons || true
+          if [ -f "$ICON" ]; then
+            npx tauri icon "$ICON" --output app/icons || true
           else
-            echo "⚠️ icon missing, skip"
+            echo "skip icon"
           fi
 
-      - name: Generate Tauri Config
+      - name: Generate tauri config
         working-directory: app
         run: |
           cat > tauri.conf.json <<EOF
@@ -159,82 +163,12 @@ jobs:
           }
           EOF
 
-      - name: Build App (Tauri)
+      - name: Build app
         working-directory: app
         run: npx tauri build
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}
-          path: |
-            app/src-tauri/target/release/bundle/**/*
-
-
-  release:
-    needs: [prepare, build]
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.job }}
-          files: |
-            **/*.msi
-            **/*.exe
-            **/*.AppImage
-            **/*.deb
-            **/*.dmg
-
-      - name: Update releases index
-        run: |
-          JOB="${{ github.event.inputs.job }}"
-          FILE="upload/jobs/${JOB}.json"
-
-          NAME=$(jq -r '.name' "$FILE")
-          VERSION=$(jq -r '.version' "$FILE")
-
-          RELEASE_FILE="releases/index.json"
-
-          mkdir -p releases
-
-          if [ ! -f "$RELEASE_FILE" ]; then
-            echo "[]" > "$RELEASE_FILE"
-          fi
-
-          jq ". += [{
-            \"id\": \"$JOB\",
-            \"name\": \"$NAME\",
-            \"version\": \"$VERSION\",
-            \"windows\": {
-              \"msi\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.msi\",
-              \"exe\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.exe\"
-            },
-            \"linux\": {
-              \"appimage\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.AppImage\",
-              \"deb\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.deb\"
-            },
-            \"macos\": {
-              \"dmg\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.dmg\"
-            }
-          }]" "$RELEASE_FILE" > tmp.json
-
-          mv tmp.json "$RELEASE_FILE"
-
-      - name: Commit release index
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
-          git add releases/index.json
-
-          git commit -m "update release index $JOB" || echo "no changes"
-
-          git push
+          path: app/src-tauri/target/release/bundle/**/*
