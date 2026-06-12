@@ -126,7 +126,6 @@ jobs:
           
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
           
-          # 复制静态文件和图标
           rm -rf tmpapp/src/*
           cp -r src/* tmpapp/src/
           rm -rf tmpapp/src-tauri/icons/*
@@ -135,14 +134,15 @@ jobs:
           cd tmpapp
           npm install
           
-          # 修改配置 (Tauri 2.0 使用 frontendDist)
+          # 修改配置 (Tauri 2.0)
           npx json -I -f src-tauri/tauri.conf.json -e "this.productName='$APP_NAME'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.version='$VERSION'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.identifier='$BUNDLE_ID'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          # 删除不允许的 devPath 字段
+          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
           
           TARGETS='["nsis","msi"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
@@ -184,7 +184,6 @@ jobs:
           APP_NAME=$(jq -r '.app_name' build_metadata.json)
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
-          PLATFORMS=$(jq -r '.platforms' build_metadata.json)
           
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
           
@@ -202,7 +201,7 @@ jobs:
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
           
           TARGETS='["deb","appimage"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
@@ -240,7 +239,6 @@ jobs:
           APP_NAME=$(jq -r '.app_name' build_metadata.json)
           VERSION=$(jq -r '.version' build_metadata.json)
           BUNDLE_ID=$(jq -r '.bundle_id' build_metadata.json)
-          PLATFORMS=$(jq -r '.platforms' build_metadata.json)
           
           npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
           
@@ -258,7 +256,7 @@ jobs:
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.frontendDist='./src'"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeDevCommand=null"
           npx json -I -f src-tauri/tauri.conf.json -e "this.build.beforeBuildCommand=null"
-          npx json -I -f src-tauri/tauri.conf.json -e "this.build.devPath=null"
+          npx json -I -f src-tauri/tauri.conf.json -e "delete this.build.devPath"
           
           TARGETS='["dmg"]'
           npx json -I -f src-tauri/tauri.conf.json -e "this.bundle.active=true"
