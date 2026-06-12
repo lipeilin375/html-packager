@@ -84,7 +84,6 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             patchelf
 
-      # ---------- 按平台处理文件 ----------
       - name: Prepare build directory (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
@@ -105,7 +104,6 @@ jobs:
           if (-not (Test-Path build/dist/index.html)) {
             Write-Host "::warning::No index.html found in zip root"
           }
-      # ------------------------------------
 
       - name: Initialize Tauri v2 project
         working-directory: build
@@ -116,9 +114,8 @@ jobs:
             --ci \
             --app-name "${{ inputs.app_name }}" \
             --window-title "${{ inputs.app_name }}" \
-            --frontend-dist ../dist \
-            --dev-url "" \
-            --identifier "${{ inputs.package_name }}"
+            --frontend-dist dist \
+            --dev-url ""
 
       - name: Generate icons
         working-directory: build
