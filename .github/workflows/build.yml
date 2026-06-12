@@ -14,6 +14,9 @@ on:
         required: true
         default: 'mac,linux,windows'
 
+permissions:
+  contents: write
+
 jobs:
   setup-matrix:
     runs-on: ubuntu-latest
@@ -46,7 +49,7 @@ jobs:
         with:
           node-version: '18'
 
-      # ---------- 原生解压，无需第三方 Action ----------
+      # ---------- 原生解压 ----------
       - name: Create output directory
         shell: bash
         run: mkdir -p app
@@ -105,6 +108,9 @@ jobs:
   release:
     needs: package
     runs-on: ubuntu-latest
+    # 为所有步骤强制使用 Node.js 24，避免弃用警告
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/download-artifact@v4
         with:
