@@ -72,7 +72,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # Linux依赖
+      # Linux dependencies
       - name: Install Linux deps
         if: matrix.platform == 'linux'
         run: |
@@ -84,25 +84,35 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      # =========================
       # workspace
+      # =========================
       - name: Setup workspace
         run: mkdir -p app
 
-      - name: Init npm project
+      - name: Init npm
         working-directory: app
         run: npm init -y
 
-      - name: Install dependencies
-        working-directory: app
-        run: npm install @tauri-apps/api @tauri-apps/cli unzipper
+      # ⚠️ unzipper 必须在 root（关键修复点）
+      - name: Install root dependencies
+        run: npm install unzipper
 
+      - name: Install app dependencies
+        working-directory: app
+        run: npm install @tauri-apps/api @tauri-apps/cli
+
+      # =========================
+      # HTML extract (stable)
+      # =========================
       - name: Extract HTML
         env:
           JOB: ${{ github.event.inputs.job }}
-        run: |
-          node scripts/extract.js
+        run: node scripts/extract.js
 
-      # icon
+      # =========================
+      # icons
+      # =========================
       - name: Generate icons
         run: |
           mkdir -p app/icons
@@ -115,7 +125,9 @@ jobs:
             echo "skip icon"
           fi
 
+      # =========================
       # tauri config
+      # =========================
       - name: Generate tauri config
         working-directory: app
         run: |
@@ -139,12 +151,16 @@ jobs:
           }
           EOF
 
+      # =========================
       # build
+      # =========================
       - name: Build App
         working-directory: app
         run: npx tauri build
 
-      # upload
+      # =========================
+      # upload artifacts
+      # =========================
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
