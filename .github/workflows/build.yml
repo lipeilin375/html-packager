@@ -72,7 +72,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # Linux deps
+      # Linux dependencies
       - name: Install Linux deps
         if: matrix.platform == 'linux'
         run: |
@@ -90,23 +90,27 @@ jobs:
       - name: Setup workspace
         run: mkdir -p app
 
-      - name: Init npm
+      - name: Init npm workspace
         working-directory: app
         run: npm init -y
 
       - name: Install dependencies (root)
         run: npm install unzipper
 
-      - name: Install app dependencies
+      - name: Install app deps
         working-directory: app
         run: npm install @tauri-apps/api @tauri-apps/cli
 
       # =========================
-      # INIT TAURI (关键修复点)
+      # 🚨 IMPORTANT CHECK (fix Cargo.toml issue)
       # =========================
-      - name: Init Tauri project
-        working-directory: app
-        run: npx tauri init --force
+      - name: Validate Tauri structure
+        run: |
+          if [ ! -f app/src-tauri/Cargo.toml ]; then
+            echo "❌ Missing src-tauri template in repo"
+            echo "Please commit a valid Tauri project structure"
+            exit 1
+          fi
 
       # =========================
       # HTML extract
@@ -125,7 +129,7 @@ jobs:
         run: node scripts/icon.js
 
       # =========================
-      # TAURI CONFIG (Node生成 v2兼容)
+      # TAURI CONFIG (dynamic env injection)
       # =========================
       - name: Generate tauri config
         env:
