@@ -1,133 +1,65 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HTML → Tauri 打包平台</title>
-
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>静态网站打包器 - Tauri 2.0</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
+    <div class="container">
+        <h1>📦 静态网站 → 桌面应用打包器</h1>
+        <p>上传 HTML 压缩包及图标，选择目标平台，自动生成可执行文件并发布到 Release</p>
 
-  <div class="topbar">
-    <div class="brand">
-      ⚡ HTML Packager → Tauri 2.0
+        <form id="buildForm">
+            <div class="form-group">
+                <label>应用名称 *</label>
+                <input type="text" id="appName" placeholder="例如：MyApp" required>
+            </div>
+
+            <div class="form-group">
+                <label>版本号 *</label>
+                <input type="text" id="version" placeholder="例如：1.0.0" required>
+            </div>
+
+            <div class="form-group">
+                <label>包名 (Bundle Identifier) *</label>
+                <input type="text" id="bundleId" placeholder="例如：com.example.myapp" required>
+            </div>
+
+            <div class="form-group">
+                <label>目标平台 *</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" value="windows" checked> Windows (.exe/.msi)</label>
+                    <label><input type="checkbox" value="linux" checked> Linux (.deb/.appimage)</label>
+                    <label><input type="checkbox" value="macos" checked> macOS (.dmg)</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>应用图标 (PNG/JPG，建议 ≥1024x1024) *</label>
+                <input type="file" id="icon" accept="image/png,image/jpeg" required>
+            </div>
+
+            <div class="form-group">
+                <label>静态网站压缩包 (ZIP，≤20MB) *</label>
+                <input type="file" id="websiteZip" accept=".zip" required>
+                <small>压缩包内应包含 index.html 及其他资源文件，直接放在根目录或单层文件夹均可</small>
+            </div>
+
+            <div class="form-group">
+                <label>GitHub Personal Access Token *</label>
+                <input type="password" id="githubToken" placeholder="需要 repo 权限" required>
+                <small>令牌需具备 <code>repo</code> 和 <code>workflow</code> 权限</small>
+            </div>
+
+            <button type="submit" id="submitBtn">🚀 提交打包任务</button>
+        </form>
+
+        <div id="message" class="message"></div>
+        <div id="result"></div>
     </div>
 
-    <div class="nav">
-      <a href="./index.html">上传</a>
-      <a href="./status.html">任务状态</a>
-      <a href="./releases.html">下载中心</a>
-    </div>
-  </div>
-
-  <div class="container">
-
-    <div class="hero">
-      <h1>一键将 HTML 打包成桌面应用</h1>
-      <p>基于 GitHub Actions + Tauri 2.0 自动构建 Windows / Linux / macOS</p>
-    </div>
-
-    <!-- GitHub Token -->
-    <div class="card">
-      <h2>🔐 GitHub 认证</h2>
-      <p class="hint">用于上传文件与触发构建（建议使用 Fine-grained Token）</p>
-
-      <input id="token" type="password" placeholder="ghp_xxxxxxxxxxxxx" />
-    </div>
-
-    <!-- App Info -->
-    <div class="card">
-      <h2>📦 应用信息</h2>
-
-      <div class="grid">
-
-        <div>
-          <label>应用名称</label>
-          <input id="appName" placeholder="My Desktop App" />
-        </div>
-
-        <div>
-          <label>版本号</label>
-          <input id="version" value="1.0.0" />
-        </div>
-
-        <div>
-          <label>包名 (identifier)</label>
-          <input id="identifier" value="com.example.app" />
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Upload -->
-    <div class="card">
-      <h2>📁 上传内容</h2>
-
-      <div class="upload-box">
-
-        <div>
-          <label>HTML 压缩包 (.zip ≤ 20MB)</label>
-          <input id="zip" type="file" accept=".zip" />
-        </div>
-
-        <div>
-          <label>应用图标 (PNG 512×512)</label>
-          <input id="icon" type="file" accept="image/png" />
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Platforms -->
-    <div class="card">
-      <h2>🖥️ 目标平台</h2>
-
-      <div class="platforms">
-
-        <label>
-          <input type="checkbox" value="windows" checked />
-          Windows
-        </label>
-
-        <label>
-          <input type="checkbox" value="linux" checked />
-          Linux
-        </label>
-
-        <label>
-          <input type="checkbox" value="macos" checked />
-          macOS
-        </label>
-
-      </div>
-    </div>
-
-    <!-- Action -->
-    <div class="card action-card">
-
-      <button id="buildBtn">
-        🚀 开始打包
-      </button>
-
-      <div id="status" class="status idle">
-        等待提交任务...
-      </div>
-
-      <div class="tips">
-        <p>⚠️ 构建由 GitHub Actions 执行，通常需要 2~8 分钟</p>
-        <p>📌 任务完成后可在「下载中心」获取安装包</p>
-      </div>
-
-    </div>
-
-  </div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-
+    <script src="script.js"></script>
 </body>
-
 </html>

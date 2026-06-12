@@ -1,220 +1,206 @@
-name: Tauri Build System
+name: Tauri Static Website Builder
 
 on:
   workflow_dispatch:
     inputs:
-      job:
+      metadata_file:
+        description: '上传的元数据文件路径 (upload/build-*.json)'
         required: true
         type: string
 
-permissions:
-  contents: write
-
-concurrency:
-  group: tauri-build-${{ github.event.inputs.job }}
-  cancel-in-progress: false
-
+env:
+  TAURI_PRIVATE_KEY: ''
+  TAURI_KEY_PASSWORD: ''
 
 jobs:
-
-  prepare:
+  setup:
     runs-on: ubuntu-latest
-
     outputs:
-      job: ${{ steps.meta.outputs.job }}
-      name: ${{ steps.meta.outputs.name }}
+      app_name: ${{ steps.meta.outputs.app_name }}
       version: ${{ steps.meta.outputs.version }}
-      identifier: ${{ steps.meta.outputs.identifier }}
-
+      platforms: ${{ steps.meta.outputs.platforms }}
+      build_id: ${{ steps.meta.outputs.build_id }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Read Job File
+      - name: Read metadata
         id: meta
         run: |
-          JOB="${{ github.event.inputs.job }}"
-          FILE="upload/jobs/${JOB}.json"
-
-          echo "job=$JOB" >> $GITHUB_OUTPUT
-
-          NAME=$(jq -r '.name' "$FILE")
-          VERSION=$(jq -r '.version' "$FILE")
-          IDENTIFIER=$(jq -r '.identifier' "$FILE")
-
-          echo "name=$NAME" >> $GITHUB_OUTPUT
+          METADATA=$(cat ${{ github.event.inputs.metadata_file }})
+          APP_NAME=$(echo "$METADATA" | jq -r '.app_name')
+          VERSION=$(echo "$METADATA" | jq -r '.version')
+          PLATFORMS=$(echo "$METADATA" | jq -c '.platforms')
+          BUILD_ID=$(echo "$METADATA" | jq -r '.timestamp')
+          echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "identifier=$IDENTIFIER" >> $GITHUB_OUTPUT
+          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "METADATA_FILE=${{ github.event.inputs.metadata_file }}" >> $GITHUB_ENV
 
-
-  build:
-    needs: prepare
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-          - os: ubuntu-latest
-            platform: linux
-          - os: macos-latest
-            platform: macos
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      # Linux dependencies
-      - name: Install Linux deps
-        if: matrix.platform == 'linux'
+      - name: Download & extract website zip
         run: |
-          sudo apt update
-          sudo apt install -y libwebkit2gtk-4.1-dev \
-            build-essential curl wget file \
-            libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
-
-      # =========================
-      # workspace setup
-      # =========================
-      - name: Setup workspace
-        run: mkdir -p app
-
-      - name: Init npm workspace
-        working-directory: app
-        run: npm init -y
-
-      - name: Install dependencies (root)
-        run: npm install unzipper
-
-      - name: Install app deps
-        working-directory: app
-        run: npm install @tauri-apps/api @tauri-apps/cli
-
-      # =========================
-      # 🚨 IMPORTANT CHECK (fix Cargo.toml issue)
-      # =========================
-      - name: Validate Tauri structure
-        run: |
-          if [ ! -f app/src-tauri/Cargo.toml ]; then
-            echo "❌ Missing src-tauri template in repo"
-            echo "Please commit a valid Tauri project structure"
-            exit 1
+          ZIP_PATH=$(jq -r '.zip_file' ${{ github.event.inputs.metadata_file }})
+          mkdir -p website_src
+          # 下载 zip 文件并解压
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -L "https://api.github.com/repos/${{ github.repository }}/contents/${ZIP_PATH}" -o upload.zip
+          unzip upload.zip -d website_src
+          # 如果解压后只有一个文件夹，则将其内容上移一层
+          if [ $(ls -1 website_src | wc -l) -eq 1 ] && [ -d "website_src/$(ls website_src)" ]; then
+            mv website_src/*/* website_src/
           fi
 
-      # =========================
-      # HTML extract
-      # =========================
-      - name: Extract HTML
-        env:
-          JOB: ${{ github.event.inputs.job }}
-        run: node scripts/extract.js
+      - name: Generate Tauri icons
+        run: |
+          npm install -g @tauri-apps/cli@latest
+          ICON_PATH=$(jq -r '.icon_file' ${{ github.event.inputs.metadata_file }})
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -L "https://api.github.com/repos/${{ github.repository }}/contents/${ICON_PATH}" -o input_icon.png
+          npx tauri icon input_icon.png -o ./generated_icons
 
-      # =========================
-      # ICON
-      # =========================
-      - name: Generate icons
-        env:
-          JOB: ${{ github.event.inputs.job }}
-        run: node scripts/icon.js
+      - name: Prepare Tauri resources artifact
+        run: |
+          mkdir -p tauri_resources/src
+          cp -r website_src/* tauri_resources/src/
+          cp -r generated_icons/* tauri_resources/icons/
+          # 保存元数据供后续 jobs 使用
+          cp ${{ github.event.inputs.metadata_file }} tauri_resources/build_metadata.json
+          tar -czf resources.tar.gz -C tauri_resources .
 
-      # =========================
-      # TAURI CONFIG (dynamic env injection)
-      # =========================
-      - name: Generate tauri config
-        env:
-          PRODUCT_NAME: ${{ needs.prepare.outputs.name }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          IDENTIFIER: ${{ needs.prepare.outputs.identifier }}
-        run: node scripts/tauri-config.js
-
-      # =========================
-      # build
-      # =========================
-      - name: Build App
-        working-directory: app
-        run: npx tauri build
-
-      # =========================
-      # upload artifacts
-      # =========================
-      - name: Upload artifact
+      - name: Upload resources artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}
-          path: app/src-tauri/target/release/bundle/**/*
+          name: tauri-resources
+          path: resources.tar.gz
 
+  build-windows:
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.platforms), 'windows')
+    runs-on: windows-latest
+    steps:
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-resources
+      - run: tar -xzf resources.tar.gz
+      - name: Build Tauri app (Windows)
+        run: |
+          node .github/scripts/prepare-tauri-config.js
+          node .github/scripts/copy-static.js
+          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          # 覆盖资源
+          Copy-Item -Path tauri_resources/src/* -Destination tmpapp/src -Recurse -Force
+          Copy-Item -Path tauri_resources/icons/* -Destination tmpapp/src-tauri/icons -Recurse -Force
+          # 修改配置
+          node .github/scripts/update-config.js tmpapp/src-tauri/tauri.conf.json
+          cd tmpapp
+          npm install
+          npm run tauri build
+          # 收集产物
+          mkdir artifacts
+          Copy-Item src-tauri/target/release/bundle/nsis/*.exe artifacts/
+          Copy-Item src-tauri/target/release/bundle/msi/*.msi artifacts/
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-bundle
+          path: tmpapp/artifacts/*
+
+  build-linux:
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.platforms), 'linux')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-resources
+      - run: tar -xzf resources.tar.gz
+      - name: Build Tauri app (Linux)
+        run: |
+          node .github/scripts/prepare-tauri-config.js
+          node .github/scripts/copy-static.js
+          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          cp -r tauri_resources/src/* tmpapp/src/
+          cp -r tauri_resources/icons/* tmpapp/src-tauri/icons/
+          node .github/scripts/update-config.js tmpapp/src-tauri/tauri.conf.json
+          cd tmpapp
+          npm install
+          npm run tauri build
+          mkdir artifacts
+          cp src-tauri/target/release/bundle/deb/*.deb artifacts/ || true
+          cp src-tauri/target/release/bundle/appimage/*.AppImage artifacts/ || true
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: tmpapp/artifacts/*
+
+  build-macos:
+    needs: setup
+    if: contains(fromJson(needs.setup.outputs.platforms), 'macos')
+    runs-on: macos-latest
+    steps:
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-resources
+      - run: tar -xzf resources.tar.gz
+      - name: Build Tauri app (macOS)
+        run: |
+          node .github/scripts/prepare-tauri-config.js
+          node .github/scripts/copy-static.js
+          npm create tauri-app@latest tmpapp -- --template vanilla --manager npm --yes
+          cp -r tauri_resources/src/* tmpapp/src/
+          cp -r tauri_resources/icons/* tmpapp/src-tauri/icons/
+          node .github/scripts/update-config.js tmpapp/src-tauri/tauri.conf.json
+          cd tmpapp
+          npm install
+          npm run tauri build
+          mkdir artifacts
+          cp src-tauri/target/release/bundle/dmg/*.dmg artifacts/
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-bundle
+          path: tmpapp/artifacts/*
 
   release:
-    needs: [prepare, build]
+    needs: [setup, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
-
+    if: always() && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success' || needs.build-macos.result == 'success')
     steps:
-
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.job }}
+          path: all_bundles
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.setup.outputs.app_name }}-v${{ needs.setup.outputs.version }}-${{ needs.setup.outputs.build_id }}
+          name: "${{ needs.setup.outputs.app_name }} v${{ needs.setup.outputs.version }}"
+          body: "自动打包生成的应用，基于 Tauri 2.0。"
+          draft: false
+          prerelease: false
           files: |
-            **/*.msi
-            **/*.exe
-            **/*.AppImage
-            **/*.deb
-            **/*.dmg
-
-      - name: Update release index
-        run: |
-          JOB="${{ github.event.inputs.job }}"
-          FILE="upload/jobs/${JOB}.json"
-
-          NAME=$(jq -r '.name' "$FILE")
-          VERSION=$(jq -r '.version' "$FILE")
-
-          mkdir -p releases
-
-          if [ ! -f releases/index.json ]; then
-            echo "[]" > releases/index.json
-          fi
-
-          jq ". += [{
-            \"id\": \"$JOB\",
-            \"name\": \"$NAME\",
-            \"version\": \"$VERSION\",
-            \"windows\": {
-              \"msi\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.msi\",
-              \"exe\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.exe\"
-            },
-            \"linux\": {
-              \"appimage\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.AppImage\",
-              \"deb\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.deb\"
-            },
-            \"macos\": {
-              \"dmg\": \"https://github.com/${{ github.repository }}/releases/download/$JOB/app.dmg\"
-            }
-          }]" releases/index.json > tmp.json
-
-          mv tmp.json releases/index.json
-
-      - name: Commit index
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
-          git add releases/index.json
-          git commit -m "update release index $JOB" || echo "no changes"
-          git push
+            all_bundles/**/*.exe
+            all_bundles/**/*.msi
+            all_bundles/**/*.deb
+            all_bundles/**/*.AppImage
+            all_bundles/**/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
