@@ -94,7 +94,7 @@ jobs:
         working-directory: app
         run: npm init -y
 
-      - name: Install dependencies (root + app)
+      - name: Install dependencies (root)
         run: npm install unzipper
 
       - name: Install app deps
@@ -102,7 +102,7 @@ jobs:
         run: npm install @tauri-apps/api @tauri-apps/cli
 
       # =========================
-      # HTML extract (Node script)
+      # HTML extract
       # =========================
       - name: Extract HTML
         env:
@@ -110,7 +110,7 @@ jobs:
         run: node scripts/extract.js
 
       # =========================
-      # ICON (Node script - fixed)
+      # ICON
       # =========================
       - name: Generate icons
         env:
@@ -118,30 +118,14 @@ jobs:
         run: node scripts/icon.js
 
       # =========================
-      # Tauri config
+      # TAURI CONFIG (FIXED: no heredoc)
       # =========================
       - name: Generate tauri config
-        working-directory: app
-        run: |
-          cat > tauri.conf.json <<EOF
-          {
-            "productName": "${{ needs.prepare.outputs.name }}",
-            "version": "${{ needs.prepare.outputs.version }}",
-            "identifier": "${{ needs.prepare.outputs.identifier }}",
-            "build": {
-              "frontendDist": "../dist"
-            },
-            "bundle": {
-              "active": true,
-              "targets": ["all"],
-              "icon": [
-                "icons/icon.png",
-                "icons/icon.ico",
-                "icons/icon.icns"
-              ]
-            }
-          }
-          EOF
+        env:
+          PRODUCT_NAME: ${{ needs.prepare.outputs.name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          IDENTIFIER: ${{ needs.prepare.outputs.identifier }}
+        run: node scripts/tauri-config.js
 
       # =========================
       # build
