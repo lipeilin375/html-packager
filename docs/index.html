@@ -1,39 +1,56 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>HTML 打包工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML 打包桌面应用</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-  <h1>静态HTML → 桌面应用</h1>
-  <div class="step">
-    <label>GitHub Personal Access Token（需要 repo 和 workflow 权限）</label>
-    <input type="password" id="token" placeholder="ghp_xxxx">
+  <div class="container">
+    <h1>📦 静态HTML → 桌面应用</h1>
+    <p class="subtitle">上传静态网站压缩包和图标，自动生成 macOS / Windows / Linux 桌面程序</p>
+
+    <div class="card">
+      <div class="step">
+        <label for="token">🔑 GitHub Token</label>
+        <input type="password" id="token" placeholder="ghp_xxxx（需要 repo 和 workflow 权限）" autocomplete="off">
+        <small>Token 仅用于本次浏览器会话，不会存储。</small>
+      </div>
+
+      <div class="step">
+        <label for="htmlZip">📁 HTML 压缩包（.zip，≤ 20MB）</label>
+        <div class="file-input-wrapper">
+          <input type="file" id="htmlZip" accept=".zip">
+          <span id="zipFileName">未选择文件</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <label for="iconFile">🖼️ 应用图标（PNG / ICNS / ICO）</label>
+        <div class="file-input-wrapper">
+          <input type="file" id="iconFile" accept=".png,.icns,.ico">
+          <span id="iconFileName">未选择文件</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <label for="platforms">💻 目标平台（可多选）</label>
+        <select id="platforms" multiple size="3">
+          <option value="mac">macOS</option>
+          <option value="linux">Linux</option>
+          <option value="windows">Windows</option>
+        </select>
+        <small>按住 Ctrl/Cmd 可多选</small>
+      </div>
+
+      <button id="buildBtn">🚀 开始打包</button>
+
+      <div id="status" class="status-box"></div>
+      <div id="downloadLinks" class="download-box"></div>
+    </div>
   </div>
-  <div class="step">
-    <label>上传HTML文件（ZIP压缩，≤20MB）</label>
-    <input type="file" id="htmlZip" accept=".zip">
-  </div>
-  <div class="step">
-    <label>上传应用图标（PNG / ICNS / ICO）</label>
-    <input type="file" id="iconFile" accept=".png,.icns,.ico">
-  </div>
-  <div class="step">
-    <label>选择目标平台</label>
-    <select id="platforms" multiple>
-      <option value="mac">macOS</option>
-      <option value="linux">Linux</option>
-      <option value="windows">Windows</option>
-    </select>
-  </div>
-  <button id="buildBtn">开始打包</button>
-  <div id="status"></div>
-  <div id="downloadLinks"></div>
 
   <script src="app.js" type="module"></script>
 </body>
-
 </html>
