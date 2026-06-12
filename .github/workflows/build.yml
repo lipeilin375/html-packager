@@ -97,9 +97,16 @@ jobs:
       - name: Install dependencies (root)
         run: npm install unzipper
 
-      - name: Install app deps
+      - name: Install app dependencies
         working-directory: app
         run: npm install @tauri-apps/api @tauri-apps/cli
+
+      # =========================
+      # INIT TAURI (关键修复点)
+      # =========================
+      - name: Init Tauri project
+        working-directory: app
+        run: npx tauri init --force
 
       # =========================
       # HTML extract
@@ -118,7 +125,7 @@ jobs:
         run: node scripts/icon.js
 
       # =========================
-      # TAURI CONFIG (FIXED: no heredoc)
+      # TAURI CONFIG (Node生成 v2兼容)
       # =========================
       - name: Generate tauri config
         env:
