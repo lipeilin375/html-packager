@@ -23,6 +23,10 @@ on:
         required: true
         default: 'windows,macos,linux'
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   setup-matrix:
     runs-on: ubuntu-latest
@@ -33,7 +37,6 @@ jobs:
         id: set-matrix
         run: |
           PLATFORMS="${{ inputs.platforms }}"
-          # 初始化空矩阵
           MATRIX='{"include":[]}'
           IFS=',' read -ra PLAT <<< "$PLATFORMS"
           for p in "${PLAT[@]}"; do
@@ -81,7 +84,9 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             patchelf
 
-      - name: Prepare build directory
+      # ---------- 按平台处理文件 ----------
+      - name: Prepare build directory (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p build/dist
           unzip -o "${{ inputs.zip_file }}" -d build/dist
@@ -90,12 +95,23 @@ jobs:
             echo "::warning::No index.html found in zip root"
           fi
 
+      - name: Prepare build directory (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/dist
+          Expand-Archive -Path "${{ inputs.zip_file }}" -DestinationPath build/dist -Force
+          Copy-Item -Path "${{ inputs.icon_file }}" -Destination build/icon.png
+          if (-not (Test-Path build/dist/index.html)) {
+            Write-Host "::warning::No index.html found in zip root"
+          }
+      # ------------------------------------
+
       - name: Initialize Tauri v2 project
         working-directory: build
         run: |
           npm init -y
           npm install --save-dev @tauri-apps/cli
-          # 使用 --ci 跳过所有交互询问
           npx tauri init \
             --ci \
             --app-name "${{ inputs.app_name }}" \
