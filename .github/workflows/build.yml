@@ -15,7 +15,6 @@ on:
         default: 'mac,linux,windows'
 
 jobs:
-  # 将 platforms 输入转换为矩阵所需的 JSON 数组
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -24,7 +23,6 @@ jobs:
       - id: parse
         run: |
           INPUT="${{ github.event.inputs.platforms }}"
-          # 将 "mac,windows" 转为 '["mac","windows"]'
           JSON_LIST="[\"${INPUT//,/\",\"}\"]"
           echo "list=$JSON_LIST" >> $GITHUB_OUTPUT
 
@@ -48,16 +46,25 @@ jobs:
         with:
           node-version: '18'
 
-      # 跨平台解压 HTML 压缩包
-      - name: Extract HTML archive
-        uses: DuckSoft/extract-archive-action@v1
-        with:
-          file: uploads/${{ github.event.inputs.archive_name }}
-          target: app/
+      # ---------- 原生解压，无需第三方 Action ----------
+      - name: Create output directory
+        shell: bash
+        run: mkdir -p app
+
+      - name: Extract HTML archive (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: unzip -o "uploads/${{ github.event.inputs.archive_name }}" -d app/
+
+      - name: Extract HTML archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive -Path "uploads/${{ github.event.inputs.archive_name }}" -DestinationPath app/ -Force
 
       - name: Copy icon
         shell: bash
-        run: cp uploads/${{ github.event.inputs.icon_name }} icon.png
+        run: cp "uploads/${{ github.event.inputs.icon_name }}" icon.png
 
       - name: Install nativefier
         run: npm install -g nativefier
@@ -73,9 +80,9 @@ jobs:
             ./app \
             ./output
 
-      # 压缩产物，各系统使用原生命令
+      # ---------- 跨平台压缩产物 ----------
       - name: Zip macOS/Linux
-        if: matrix.os != 'windows-latest'
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd output
@@ -83,7 +90,7 @@ jobs:
           zip -r "../${{ matrix.platform }}.zip" "$dir_name"
 
       - name: Zip Windows
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cd output
@@ -95,7 +102,6 @@ jobs:
           name: ${{ matrix.platform }}-package
           path: ${{ matrix.platform }}.zip
 
-  # 将所有平台产物合并发布到 Release
   release:
     needs: package
     runs-on: ubuntu-latest
