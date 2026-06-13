@@ -218,6 +218,96 @@ jobs:
             myapp/src-tauri/target/release/bundle/deb/*.deb
             myapp/src-tauri/target/release/bundle/appimage/*.AppImage
 
+  build-linux-arm64:
+    needs: prepare
+    if: ${{ contains(fromJson(needs.prepare.outputs.platforms), 'linux-arm64') }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download source files
+        uses: actions/download-artifact@v4
+        with:
+          name: source-zip
+          path: ./upload-zip
+
+      - name: Download icon
+        uses: actions/download-artifact@v4
+        with:
+          name: source-icon
+          path: ./upload-icon
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            unzip \
+            jq
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create Tauri project
+        run: npm create tauri-app@latest myapp -- --template vanilla --manager npm --yes
+        env:
+          CI: true
+
+      - name: Install dependencies
+        working-directory: myapp
+        run: npm install
+
+      - name: Generate icons
+        run: |
+          ICON_FILE=$(ls ./upload-icon/*)
+          cd myapp
+          npx tauri icon "../$ICON_FILE"
+
+      - name: Extract website ZIP
+        run: |
+          ZIP_FILE=$(ls ./upload-zip/*)
+          mkdir -p myapp/src
+          unzip -o "$ZIP_FILE" -d myapp/src/
+
+      - name: Configure tauri.conf.json
+        run: |
+          CONFIG=myapp/src-tauri/tauri.conf.json
+          jq \
+            --arg name "${{ needs.prepare.outputs.app_name }}" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg id "${{ needs.prepare.outputs.identifier }}" \
+            '.productName = $name | .version = $version | .identifier = $id |
+             .bundle.targets = ["deb","appimage"] |
+             .bundle.createUpdaterArtifacts = false |
+             .app.windows[0].dragDropEnabled = false' \
+            "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
+
+      - name: Set author in Cargo.toml
+        run: |
+          sed -i "s/^authors = .*/authors = [\"${{ needs.prepare.outputs.author }}\"]/" myapp/src-tauri/Cargo.toml
+
+      - name: Build
+        working-directory: myapp
+        run: npm run tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Upload Linux ARM64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-artifacts
+          path: |
+            myapp/src-tauri/target/release/bundle/deb/*.deb
+            myapp/src-tauri/target/release/bundle/appimage/*.AppImage
+
   build-macos:
     needs: prepare
     if: ${{ contains(fromJson(needs.prepare.outputs.platforms), 'macos') }}
@@ -297,8 +387,8 @@ jobs:
           path: myapp/src-tauri/target/release/bundle/dmg/*.dmg
 
   release:
-    needs: [prepare, build-windows, build-linux, build-macos]
-    if: always() && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success' || needs.build-macos.result == 'success')
+    needs: [prepare, build-windows, build-linux, build-linux-arm64, build-macos]
+    if: always() && (needs.build-windows.result == 'success' || needs.build-linux.result == 'success' || needs.build-linux-arm64.result == 'success' || needs.build-macos.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -322,6 +412,11 @@ jobs:
           files: ./dist/**
           fail_on_unmatched_files: false
 
+  cleaner:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - uses: actions/checkout@v4
 
       - name: Delete uploaded source files
