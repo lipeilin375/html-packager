@@ -1,0 +1,11 @@
+{
+  "appName": "智慧哨表系统",
+  "version": "1.0.1",
+  "identifier": "com.super.memory",
+  "author": "LiPeilin",
+  "platforms": [
+    "windows",
+    "linux",
+    "macos"
+  ]
+}
