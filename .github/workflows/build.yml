@@ -109,8 +109,8 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' |
-             .app.windows[0].title = $window_title \
+             .app.windows[0].dragDropEnabled = false |
+             .app.windows[0].title = $window_title' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -200,8 +200,8 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' |
-             .app.windows[0].title = $window_title \
+             .app.windows[0].dragDropEnabled = false |
+             .app.windows[0].title = $window_title' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -293,8 +293,8 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' |
-             .app.windows[0].title = $window_title \
+             .app.windows[0].dragDropEnabled = false |
+             .app.windows[0].title = $window_title' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -417,8 +417,8 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' |
-             .app.windows[0].title = $window_title \
+             .app.windows[0].dragDropEnabled = false |
+             .app.windows[0].title = $window_title' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
