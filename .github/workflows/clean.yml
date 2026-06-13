@@ -1,0 +1,30 @@
+name: Clean Upload Directory
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: clean-upload
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove upload directory contents
+        run: rm -rf upload/* && ls -la upload/
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: clean upload directory"
+
+      - name: Push changes
+        run: git push
