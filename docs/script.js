@@ -70,29 +70,36 @@ async function triggerWorkflow(inputs, token) {
 
 // ── load releases ─────────────────────────────────────────────────────────────
 
-async function loadReleases(token) {
+async function loadReleases(token, appName, version, pollInterval = null) {
   const headers = { Authorization: `token ${token}` };
-  const res = await fetch(`${API}/releases?per_page=5`, { headers });
+  const tagPrefix = `${appName}-${version}`;
+
+  const res = await fetch(`${API}/releases?per_page=100`, { headers });
   if (!res.ok) return;
   const releases = await res.json();
-  if (!releases.length) return;
+
+  const targetRelease = releases.find(r => r.tag_name.startsWith(tagPrefix));
+  if (!targetRelease) {
+    setStatus("构建中...（未找到对应版本的 Release）", "info");
+    if (pollInterval !== false) {
+      setTimeout(() => loadReleases(token, appName, version, pollInterval), 15000);
+    }
+    return;
+  }
 
   const container = document.getElementById('releaseList');
   container.innerHTML = '';
-  releases.forEach(r => {
-    const exts = ['.exe', '.msi', '.deb', '.AppImage', '.dmg'];
-    const assets = r.assets.filter(a => exts.some(e => a.name.endsWith(e)));
-    if (!assets.length) return;
 
+  const exts = ['.exe', '.msi', '.deb', '.AppImage', '.dmg'];
+  const assets = targetRelease.assets.filter(a => exts.some(e => a.name.endsWith(e)));
+
+  if (assets.length) {
     const item = document.createElement('div');
     item.className = 'release-item';
-    item.innerHTML = `<h3>${r.name}</h3><div class="release-assets">${
+    item.innerHTML = `<h3>${targetRelease.name}</h3><div class="release-assets">${
       assets.map(a => `<a class="asset-link" href="${a.browser_download_url}" target="_blank">⬇ ${a.name}</a>`).join('')
     }</div>`;
     container.appendChild(item);
-  });
-
-  if (container.children.length) {
     document.getElementById('releases').classList.remove('hidden');
   }
 }
@@ -106,6 +113,7 @@ document.getElementById('packForm').addEventListener('submit', async (e) => {
   const version    = document.getElementById('version').value.trim();
   const identifier = document.getElementById('identifier').value.trim();
   const author     = document.getElementById('author').value.trim();
+  const windowTitle = document.getElementById('windowTitle').value.trim();
   const token      = document.getElementById('token').value.trim();
   const zipFile    = document.getElementById('zipFile').files[0];
   const iconFile   = document.getElementById('iconFile').files[0];
@@ -132,11 +140,11 @@ document.getElementById('packForm').addEventListener('submit', async (e) => {
 
     setStatus('正在上传元数据并触发构建...', 'info');
 
-    await uploadJson({ appName, version, identifier, author, platforms }, metaPath, token);
+    await uploadJson({ appName, version, identifier, author, platforms, windowTitle }, metaPath, token);
     await triggerWorkflow({ meta_path: metaPath, zip_path: zipPath, icon_path: iconPath }, token);
 
     setStatus('✅ 构建已启动！请前往 GitHub Actions 查看进度，完成后可在下方下载。', 'success');
-    setTimeout(() => loadReleases(token), 3000);
+    setTimeout(() => loadReleases(token, appName, version), 3000);
   } catch (err) {
     setStatus(`❌ ${err.message}`, 'error');
   } finally {

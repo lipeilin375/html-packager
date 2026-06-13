@@ -22,6 +22,7 @@ jobs:
       identifier: ${{ steps.meta.outputs.identifier }}
       author: ${{ steps.meta.outputs.author }}
       platforms: ${{ steps.meta.outputs.platforms }}
+      window_title: ${{ steps.meta.outputs.window_title }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +35,7 @@ jobs:
           echo "identifier=$(echo $META | jq -r '.identifier')" >> $GITHUB_OUTPUT
           echo "author=$(echo $META | jq -r '.author')" >> $GITHUB_OUTPUT
           echo "platforms=$(echo $META | jq -c '.platforms')" >> $GITHUB_OUTPUT
-
+          echo "window_title=$(echo $META | jq -r '.windowTitle')" >> $GITHUB_OUTPUT
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
@@ -104,10 +105,12 @@ jobs:
             --arg name "${{ needs.prepare.outputs.app_name }}" \
             --arg version "${{ needs.prepare.outputs.version }}" \
             --arg id "${{ needs.prepare.outputs.identifier }}" \
+            --arg window_title "${{ needs.prepare.outputs.window_title }}" \
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' \
+             .app.windows[0].dragDropEnabled = false' |
+             .app.windows[0].title = $window_title \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -193,10 +196,12 @@ jobs:
             --arg name "${{ needs.prepare.outputs.app_name }}" \
             --arg version "${{ needs.prepare.outputs.version }}" \
             --arg id "${{ needs.prepare.outputs.identifier }}" \
+            --arg window_title "${{ needs.prepare.outputs.window_title }}" \
             '.productName = $name | .version = $version | .identifier = $id |
-             .bundle.targets = ["deb","appimage"] |
+             .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' \
+             .app.windows[0].dragDropEnabled = false' |
+             .app.windows[0].title = $window_title \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -284,10 +289,12 @@ jobs:
             --arg name "${{ needs.prepare.outputs.app_name }}" \
             --arg version "${{ needs.prepare.outputs.version }}" \
             --arg id "${{ needs.prepare.outputs.identifier }}" \
+            --arg window_title "${{ needs.prepare.outputs.window_title }}" \
             '.productName = $name | .version = $version | .identifier = $id |
-             .bundle.targets = ["deb","appimage"] |
+             .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' \
+             .app.windows[0].dragDropEnabled = false' |
+             .app.windows[0].title = $window_title \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -406,10 +413,12 @@ jobs:
             --arg name "${{ needs.prepare.outputs.app_name }}" \
             --arg version "${{ needs.prepare.outputs.version }}" \
             --arg id "${{ needs.prepare.outputs.identifier }}" \
+            --arg window_title "${{ needs.prepare.outputs.window_title }}" \
             '.productName = $name | .version = $version | .identifier = $id |
-             .bundle.targets = ["dmg"] |
+             .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .app.windows[0].dragDropEnabled = false' \
+             .app.windows[0].dragDropEnabled = false' |
+             .app.windows[0].title = $window_title \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -457,6 +466,7 @@ jobs:
 
   cleaner:
     runs-on: ubuntu-latest
+    needs: [prepare]
     permissions:
       contents: write
     steps:
