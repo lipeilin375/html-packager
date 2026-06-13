@@ -1,0 +1,13 @@
+{
+  "appName": "super-memory",
+  "version": "1.0.6",
+  "identifier": "com.super.memory",
+  "author": "LiPeilin",
+  "platforms": [
+    "windows",
+    "linux",
+    "linux-arm64",
+    "macos"
+  ],
+  "windowTitle": "智慧哨表系统"
+}
