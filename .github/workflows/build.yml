@@ -74,17 +74,13 @@ jobs:
 
       - name: Create Tauri project
         shell: bash
-        run: |
-          npm create tauri-app@latest myapp -- --template vanilla --manager npm --yes
+        run: npm create tauri-app@latest myapp -- --template vanilla --manager npm --yes
         env:
           CI: true
 
       - name: Install dependencies
         working-directory: myapp
         run: npm install
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
 
       - name: Generate icons
         shell: bash
@@ -111,7 +107,7 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
              .bundle.createUpdaterArtifacts = false |
-             .webview.dragDropEnabled = true' \
+             .app.windows[0].dragDropEnabled = false' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -130,9 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
-          path: |
-            myapp/src-tauri/target/release/bundle/nsis/*.exe
-            myapp/src-tauri/target/release/bundle/msi/*.msi
+          path: myapp/src-tauri/target/release/bundle/nsis/*.exe
 
   build-linux:
     needs: prepare
@@ -202,7 +196,7 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["deb","appimage"] |
              .bundle.createUpdaterArtifacts = false |
-             .webview.dragDropEnabled = true' \
+             .app.windows[0].dragDropEnabled = false' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -282,7 +276,7 @@ jobs:
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["dmg"] |
              .bundle.createUpdaterArtifacts = false |
-             .webview.dragDropEnabled = true' \
+             .app.windows[0].dragDropEnabled = false' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -328,6 +322,7 @@ jobs:
           files: ./dist/**
           fail_on_unmatched_files: false
 
+  cleaner:
       - uses: actions/checkout@v4
 
       - name: Delete uploaded source files
