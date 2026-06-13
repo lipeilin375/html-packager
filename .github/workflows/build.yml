@@ -301,6 +301,47 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
+      - name: Bundle offline installer for Kylin/Ubuntu 22.04 arm64
+        run: |
+          DEB=$(ls myapp/src-tauri/target/release/bundle/deb/*.deb)
+          APP_NAME=$(basename "$DEB" .deb)
+          BUNDLE_DIR="offline-bundle"
+          DEPS_DIR="$BUNDLE_DIR/deps"
+          mkdir -p "$DEPS_DIR"
+
+          # Add Ubuntu 22.04 (jammy) arm64 sources to download compatible packages
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main universe" \
+            | sudo tee /etc/apt/sources.list.d/jammy-arm64.list
+          sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/jammy-arm64.list" \
+                               -o Dir::Etc::sourceparts="-" \
+                               -o APT::Get::List-Cleanup="0" 2>/dev/null || true
+
+          # Download webkit and core runtime deps for jammy arm64
+          cd "$DEPS_DIR"
+          apt-get download \
+            libwebkit2gtk-4.1-0:arm64 \
+            libjavascriptcoregtk-4.1-0:arm64 \
+            libsoup-3.0-0:arm64 \
+            libsoup-3.0-common:arm64 \
+            xdg-utils 2>/dev/null || true
+          cd -
+
+          cp "$DEB" "$BUNDLE_DIR/"
+          cat > "$BUNDLE_DIR/install.sh" << 'EOF'
+          #!/bin/bash
+          set -e
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          echo "Installing dependencies..."
+          sudo dpkg -i "$SCRIPT_DIR/deps/"*.deb 2>/dev/null || true
+          sudo apt-get install -f -y 2>/dev/null || true
+          echo "Installing application..."
+          sudo dpkg -i "$SCRIPT_DIR/"*.deb
+          echo "Done."
+          EOF
+          chmod +x "$BUNDLE_DIR/install.sh"
+
+          tar -czf "${APP_NAME}-kylin-arm64-offline.tar.gz" -C "$BUNDLE_DIR" .
+
       - name: Upload Linux ARM64 artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -308,6 +349,7 @@ jobs:
           path: |
             myapp/src-tauri/target/release/bundle/deb/*.deb
             myapp/src-tauri/target/release/bundle/appimage/*.AppImage
+            *-kylin-arm64-offline.tar.gz
 
   build-macos:
     needs: prepare
