@@ -1,144 +1,153 @@
-const REPO_OWNER = 'lipeilin375';      // 需替换为实际仓库所有者
-const REPO_NAME = 'html-packager';            // 需替换为实际仓库名
+const REPO_OWNER = 'lipeilin375';
+const REPO_NAME  = 'html-packager';
 const WORKFLOW_FILE = 'build.yml';
 
-document.getElementById('buildForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+const API = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 
-    const token = document.getElementById('githubToken').value;
-    if (!token) {
-        showMessage('请提供 GitHub Token', 'error');
-        return;
-    }
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-    const appName = document.getElementById('appName').value.trim();
-    const version = document.getElementById('version').value.trim();
-    const bundleId = document.getElementById('bundleId').value.trim();
-    const platforms = Array.from(document.querySelectorAll('.checkbox-group input:checked')).map(cb => cb.value);
-    const iconFile = document.getElementById('icon').files[0];
-    const zipFile = document.getElementById('websiteZip').files[0];
+function setStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = `status ${type}`;
+  el.classList.remove('hidden');
+}
 
-    if (!appName || !version || !bundleId || platforms.length === 0 || !iconFile || !zipFile) {
-        showMessage('请完整填写所有必填项', 'error');
-        return;
-    }
-    if (zipFile.size > 20 * 1024 * 1024) {
-        showMessage('压缩包不能超过 20MB', 'error');
-        return;
-    }
+async function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
 
-    const timestamp = Date.now();
-    const safeName = appName.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    const zipPath = `upload/${safeName}-${timestamp}.zip`;
-    const iconPath = `upload/${safeName}-icon-${timestamp}.png`;
-    const metaPath = `upload/build-${timestamp}.json`;
+async function putFile(path, content, token, sha = null) {
+  const body = { message: `upload: ${path}`, content };
+  if (sha) body.sha = sha;
+  const res = await fetch(`${API}/contents/${path}`, {
+    method: 'PUT',
+    headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`上传 ${path} 失败: ${res.status} ${await res.text()}`);
+  return res.json();
+}
 
-    // 准备元数据
-    const metadata = {
-        app_name: appName,
-        version: version,
-        bundle_id: bundleId,
-        platforms: platforms,
-        zip_file: zipPath,
-        icon_file: iconPath,
-        timestamp: timestamp
-    };
+async function getFileSha(path, token) {
+  const res = await fetch(`${API}/contents/${path}`, {
+    headers: { Authorization: `token ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`获取文件信息失败: ${res.status}`);
+  return (await res.json()).sha;
+}
 
-    const headers = {
-        Authorization: `token ${token}`,
-        Accept: 'application/vnd.github.v3+json'
-    };
+// ── upload ────────────────────────────────────────────────────────────────────
 
-    try {
-        // 1. 上传 zip 文件
-        await uploadFile(zipPath, zipFile, headers);
-        // 2. 上传图标 (转换为 PNG)
-        const iconBase64 = await fileToBase64(iconFile);
-        await uploadFile(iconPath, iconBase64, headers, true);
-        // 3. 上传 metadata.json
-        const metaContent = btoa(unescape(encodeURIComponent(JSON.stringify(metadata, null, 2))));
-        await uploadFile(metaPath, metaContent, headers, true);
+async function uploadFile(file, repoPath, token) {
+  const content = await toBase64(file);
+  const sha = await getFileSha(repoPath, token);
+  return putFile(repoPath, content, token, sha);
+}
 
-        // 4. 触发 workflow_dispatch
-        const dispatchUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
-        const response = await fetch(dispatchUrl, {
-            method: 'POST',
-            headers: {
-                ...headers,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ref: 'main',       // 触发分支，根据实际情况调整
-                inputs: {
-                    metadata_file: metaPath
-                }
-            })
-        });
-        if (!response.ok) throw new Error(`触发 Action 失败: ${response.status}`);
-        showMessage('打包任务已提交！请稍后查看 Releases 页面获取下载链接。', 'success');
-        document.getElementById('result').innerHTML = `<a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases" target="_blank">前往 Releases 下载</a>`;
-    } catch (err) {
-        console.error(err);
-        showMessage(`错误: ${err.message}`, 'error');
-    }
+async function uploadJson(obj, repoPath, token) {
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(obj, null, 2))));
+  const sha = await getFileSha(repoPath, token);
+  return putFile(repoPath, content, token, sha);
+}
+
+// ── trigger workflow ──────────────────────────────────────────────────────────
+
+async function triggerWorkflow(inputs, token) {
+  const res = await fetch(`${API}/actions/workflows/${WORKFLOW_FILE}/dispatches`, {
+    method: 'POST',
+    headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: 'main', inputs }),
+  });
+  if (!res.ok) throw new Error(`触发 Workflow 失败: ${res.status} ${await res.text()}`);
+}
+
+// ── load releases ─────────────────────────────────────────────────────────────
+
+async function loadReleases(token) {
+  const headers = { Authorization: `token ${token}` };
+  const res = await fetch(`${API}/releases?per_page=5`, { headers });
+  if (!res.ok) return;
+  const releases = await res.json();
+  if (!releases.length) return;
+
+  const container = document.getElementById('releaseList');
+  container.innerHTML = '';
+  releases.forEach(r => {
+    const exts = ['.exe', '.msi', '.deb', '.AppImage', '.dmg'];
+    const assets = r.assets.filter(a => exts.some(e => a.name.endsWith(e)));
+    if (!assets.length) return;
+
+    const item = document.createElement('div');
+    item.className = 'release-item';
+    item.innerHTML = `<h3>${r.name}</h3><div class="release-assets">${
+      assets.map(a => `<a class="asset-link" href="${a.browser_download_url}" target="_blank">⬇ ${a.name}</a>`).join('')
+    }</div>`;
+    container.appendChild(item);
+  });
+
+  if (container.children.length) {
+    document.getElementById('releases').classList.remove('hidden');
+  }
+}
+
+// ── form submit ───────────────────────────────────────────────────────────────
+
+document.getElementById('packForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const appName    = document.getElementById('appName').value.trim();
+  const version    = document.getElementById('version').value.trim();
+  const identifier = document.getElementById('identifier').value.trim();
+  const author     = document.getElementById('author').value.trim();
+  const token      = document.getElementById('token').value.trim();
+  const zipFile    = document.getElementById('zipFile').files[0];
+  const iconFile   = document.getElementById('iconFile').files[0];
+  const platforms  = [...document.querySelectorAll('input[name="platform"]:checked')].map(c => c.value);
+
+  if (!platforms.length) { setStatus('请至少选择一个目标平台', 'error'); return; }
+  if (zipFile.size > 20 * 1024 * 1024) { setStatus('ZIP 文件超过 20MB 限制', 'error'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  setStatus('正在上传文件...', 'info');
+
+  try {
+    const ts = Date.now();
+    const zipPath  = `upload/site-${ts}.zip`;
+    const iconExt  = iconFile.name.split('.').pop();
+    const iconPath = `upload/icon-${ts}.${iconExt}`;
+    const metaPath = `upload/meta-${ts}.json`;
+
+    await Promise.all([
+      uploadFile(zipFile, zipPath, token),
+      uploadFile(iconFile, iconPath, token),
+    ]);
+
+    setStatus('正在上传元数据并触发构建...', 'info');
+
+    await uploadJson({ appName, version, identifier, author, platforms }, metaPath, token);
+    await triggerWorkflow({ meta_path: metaPath, zip_path: zipPath, icon_path: iconPath }, token);
+
+    setStatus('✅ 构建已启动！请前往 GitHub Actions 查看进度，完成后可在下方下载。', 'success');
+    setTimeout(() => loadReleases(token), 3000);
+  } catch (err) {
+    setStatus(`❌ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 });
 
-async function uploadFile(path, contentOrFile, headers, isBase64Data = false) {
-    let content;
-    if (isBase64Data) {
-        content = contentOrFile;
-    } else if (contentOrFile instanceof File) {
-        content = await fileToBase64(contentOrFile);
-    } else {
-        content = contentOrFile;
-    }
-
-    const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
-    // 检查文件是否存在（先获取 sha）
-    let sha = null;
-    try {
-        const getRes = await fetch(url, { headers });
-        if (getRes.ok) {
-            const data = await getRes.json();
-            sha = data.sha;
-        }
-    } catch (e) { /* 文件不存在则继续 */ }
-
-    const body = {
-        message: `Upload ${path}`,
-        content: content,
-        branch: 'main'
-    };
-    if (sha) body.sha = sha;
-
-    const res = await fetch(url, {
-        method: 'PUT',
-        headers: headers,
-        body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`上传 ${path} 失败: ${res.status} ${err}`);
-    }
-}
-
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
-
-function showMessage(msg, type) {
-    const msgDiv = document.getElementById('message');
-    msgDiv.textContent = msg;
-    msgDiv.className = `message ${type}`;
-    setTimeout(() => {
-        msgDiv.className = 'message';
-    }, 8000);
-}
+// ── init: load existing releases if token present ─────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const tokenEl = document.getElementById('token');
+  tokenEl.addEventListener('change', () => {
+    if (tokenEl.value.trim()) loadReleases(tokenEl.value.trim());
+  });
+});
