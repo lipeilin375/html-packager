@@ -322,7 +322,6 @@ jobs:
           files: ./dist/**
           fail_on_unmatched_files: false
 
-  cleaner:
       - uses: actions/checkout@v4
 
       - name: Delete uploaded source files
