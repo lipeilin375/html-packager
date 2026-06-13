@@ -110,7 +110,8 @@ jobs:
             --arg id "${{ needs.prepare.outputs.identifier }}" \
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["nsis"] |
-             .bundle.createUpdaterArtifacts = false' \
+             .bundle.createUpdaterArtifacts = false |
+             .webview.dragDropEnabled = true' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -200,7 +201,8 @@ jobs:
             --arg id "${{ needs.prepare.outputs.identifier }}" \
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["deb","appimage"] |
-             .bundle.createUpdaterArtifacts = false' \
+             .bundle.createUpdaterArtifacts = false |
+             .webview.dragDropEnabled = true' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -279,7 +281,8 @@ jobs:
             --arg id "${{ needs.prepare.outputs.identifier }}" \
             '.productName = $name | .version = $version | .identifier = $id |
              .bundle.targets = ["dmg"] |
-             .bundle.createUpdaterArtifacts = false' \
+             .bundle.createUpdaterArtifacts = false |
+             .webview.dragDropEnabled = true' \
             "$CONFIG" > tmp.json && mv tmp.json "$CONFIG"
 
       - name: Set author in Cargo.toml
@@ -324,3 +327,21 @@ jobs:
             **Author:** ${{ needs.prepare.outputs.author }}
           files: ./dist/**
           fail_on_unmatched_files: false
+
+      - uses: actions/checkout@v4
+
+      - name: Delete uploaded source files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for path in \
+            "${{ github.event.inputs.meta_path }}" \
+            "${{ github.event.inputs.zip_path }}" \
+            "${{ github.event.inputs.icon_path }}"; do
+            SHA=$(gh api "repos/${{ github.repository }}/contents/$path" --jq '.sha' 2>/dev/null || true)
+            if [ -n "$SHA" ]; then
+              gh api --method DELETE "repos/${{ github.repository }}/contents/$path" \
+                -f message="cleanup: remove build source $path" \
+                -f sha="$SHA"
+            fi
+          done
