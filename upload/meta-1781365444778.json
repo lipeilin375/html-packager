@@ -1,0 +1,12 @@
+{
+  "appName": "super-memory",
+  "version": "1.0.5",
+  "identifier": "com.super.memory",
+  "author": "LiPeilin",
+  "platforms": [
+    "windows",
+    "linux",
+    "linux-arm64",
+    "macos"
+  ]
+}
